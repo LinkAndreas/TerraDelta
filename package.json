@@ -5,9 +5,9 @@
   "description": "AI-powered semantic change detection for aerial orthophotos.",
   "license": "MIT",
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev -p 32771 --webpack",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start -p 32771",
     "lint": "next lint"
   },
   "dependencies": {

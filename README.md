@@ -61,7 +61,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>, click **⚙**, choose a provider and paste your API key,
+Open <http://localhost:32771>, click **⚙**, choose a provider and paste your API key,
 upload an earlier and a later image, then **Detect changes**.
 
 *(Optional)* to provide a server-side fallback key for local dev, copy
@@ -75,21 +75,21 @@ The app builds to a self-contained Next.js standalone server.
 
 ```bash
 docker compose up -d --build
-# → http://localhost:3000
+# → http://localhost:32771
 ```
 
 **Plain Docker:**
 
 ```bash
 docker build -t terradelta .
-docker run -d -p 32771:3000 --name terradelta terradelta
+docker run -d -p 32771:32771 --name terradelta terradelta
 ```
 
 API keys are **optional** at the container level — pass them only if you want a
 server fallback:
 
 ```bash
-docker run -d -p 32771:3000 \
+docker run -d -p 32771:32771 \
   -e ANTHROPIC_API_KEY=... \
   -e GEMINI_API_KEY=... \
   terradelta
@@ -138,7 +138,7 @@ server**.
 | ------------------- | -------- | ----------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY` | No       | Server fallback key for Claude. Users can supply their own in-app. |
 | `GEMINI_API_KEY`    | No       | Server fallback key for Gemini. `GOOGLE_API_KEY` also works.       |
-| `PORT`              | No       | Port the server listens on (default `3000`).                      |
+| `PORT`              | No       | Port the server listens on (default `32771`).                      |
 
 All AI provider/model/key selection is also available at runtime in the app's
 settings (⚙), stored per-browser in `localStorage`.
