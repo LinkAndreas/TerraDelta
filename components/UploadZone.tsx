@@ -74,10 +74,10 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
           </span>
         </>
       ) : (
-        <div style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600 }}>{label}</div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{sublabel}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>{t("upload.hint")}</div>
+        <div style={{ padding: 20 }}>
+          <div style={{ fontWeight: 600, fontSize: 16.5 }}>{label}</div>
+          <div style={{ fontSize: 14, color: "var(--muted)", marginTop: 6 }}>{sublabel}</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 12 }}>{t("upload.hint")}</div>
         </div>
       )}
       <input

@@ -46,8 +46,8 @@ export default function ReportTable({
 
   return (
     <div className="card">
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-        <strong>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+        <strong style={{ fontSize: 19 }}>
           {rows.length !== changes.length
             ? t("report.headingOf", { n: rows.length, total: changes.length })
             : t("report.heading", { n: changes.length })}
@@ -57,9 +57,9 @@ export default function ReportTable({
         </button>
       </div>
 
-      <div className="row" style={{ gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+      <div className="row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         {TYPES.map((tp) => (
-          <label key={tp} className="row" style={{ gap: 6, fontSize: 13 }} title={t("report.tipType")}>
+          <label key={tp} className="row" style={{ gap: 6, fontSize: 14 }} title={t("report.tipType")}>
             <input
               type="checkbox"
               checked={typeFilter[tp]}
@@ -69,12 +69,12 @@ export default function ReportTable({
             <span style={{ color: "var(--muted)" }}>({counts[tp]})</span>
           </label>
         ))}
-        <label className="row" style={{ gap: 6, fontSize: 13 }} title={t("report.tipMinConf")}>
+        <label className="row" style={{ gap: 6, fontSize: 14 }} title={t("report.tipMinConf")}>
           <span className="muted">{t("report.minConf")}</span>
           <select
             value={minConf}
             onChange={(e) => setMinConf(e.target.value as Confidence)}
-            style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 6px" }}
+            style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 8px", fontSize: 14 }}
           >
             <option value="low">{t("conf.any")}</option>
             <option value="medium">{t("conf.mediumPlus")}</option>
@@ -85,7 +85,7 @@ export default function ReportTable({
           placeholder={t("report.search")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ marginLeft: "auto", minWidth: 140 }}
+          style={{ marginLeft: "auto", minWidth: 160 }}
         />
       </div>
 

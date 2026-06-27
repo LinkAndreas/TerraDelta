@@ -217,22 +217,22 @@ export default function Home() {
     <div className="container">
       <div className="topbar">
         <div>
-          <div className="row" style={{ gap: 12 }}>
-            <Logo size={40} />
+          <div className="row" style={{ gap: 14 }}>
+            <Logo size={46} />
             <div>
               <h1 className="wordmark">
                 Terra<span className="wordmark-accent">Delta</span>
               </h1>
-              <div className="muted" style={{ fontSize: 12.5, marginTop: -2, letterSpacing: 0.2 }}>
+              <div className="muted" style={{ fontSize: 14, marginTop: 0, letterSpacing: 0.2 }}>
                 {t("app.tagline")}
               </div>
             </div>
           </div>
-          <p className="muted" style={{ margin: "10px 0 0", maxWidth: 820 }}>
+          <p className="muted" style={{ margin: "14px 0 0", maxWidth: 860, fontSize: 15.5 }}>
             {t("app.subtitle")}
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 10 }}>
           <button
             className="icon-btn"
             onClick={() => setSettingsOpen(true)}
@@ -252,9 +252,9 @@ export default function Home() {
             className="icon-btn"
             onClick={() => setShowGuide(true)}
             title={t("onboard.tipReopen")}
-            style={{ fontSize: 13, fontWeight: 600 }}
+            style={{ fontSize: 14.5, fontWeight: 600 }}
           >
-            ? {t("onboard.reopen")}
+            {t("onboard.reopen")}
           </button>
           <select
             className="lang"
