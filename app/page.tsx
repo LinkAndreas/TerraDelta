@@ -62,7 +62,7 @@ export default function Home() {
   // Provider / model / API keys (persisted to localStorage).
   const [provider, setProvider] = useState<Provider>("anthropic");
   const [model, setModel] = useState<string>(PROVIDERS.anthropic.defaultModel);
-  const [keys, setKeys] = useState<Record<Provider, string>>({ anthropic: "", gemini: "" });
+  const [keys, setKeys] = useState<Record<Provider, string>>({ anthropic: "" });
   const [loaded, setLoaded] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -80,7 +80,7 @@ export default function Home() {
       const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
       if (saved.provider && PROVIDERS[saved.provider as Provider]) setProvider(saved.provider);
       if (typeof saved.model === "string") setModel(saved.model);
-      if (saved.keys) setKeys({ anthropic: "", gemini: "", ...saved.keys });
+      if (saved.keys) setKeys({ anthropic: "", ...saved.keys });
     } catch {
       /* ignore */
     }

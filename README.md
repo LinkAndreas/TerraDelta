@@ -25,13 +25,13 @@ crop cycles. Changes are highlighted on an interactive comparison view and liste
 in a filterable, exportable report.
 
 > **Bring your own key:** the app needs **no server-side secrets**. Each user
-> enters their own Anthropic or Google Gemini API key in the in-app settings; it
+> enters their own Anthropic API key in the in-app settings; it
 > is stored only in their browser. This makes deployment trivial and keeps keys
 > out of the codebase.
 
 ## ✨ Features
 
-- **Two AI providers** — Anthropic **Claude** and Google **Gemini**, with model selection.
+- **AI change detection** — Powered by Anthropic **Claude**, with model selection.
 - **In-browser image co-registration** — ORB feature matching + RANSAC homography (OpenCV.js, no server GPU).
 - **Tiled, high-resolution analysis** — the scene is split into overlapping tiles and analyzed region by region for high recall and precise boxes, then de-duplicated.
 - **Precision-focused prompt** — ignores lighting/season/shadows/crop changes; flags only genuine structural & land-use changes.
@@ -44,7 +44,7 @@ in a filterable, exportable report.
 
 1. Both images are **co-registered** in the browser (ORB + RANSAC homography), warping the later image onto the earlier one's frame.
 2. The aligned pair is split into **overlapping high-resolution tiles** plus one overview pass.
-3. Each region is sent to a **vision model** (Claude or Gemini) that reasons about genuine structural / land-use changes.
+3. Each region is sent to a **vision model** (Claude) that reasons about genuine structural / land-use changes.
 4. Detections are mapped back to global coordinates, **de-duplicated**, highlighted and listed.
 
 Only aligned, downscaled tiles ever leave the browser; the API key is used
@@ -91,7 +91,6 @@ server fallback:
 ```bash
 docker run -d -p 32771:32771 \
   -e ANTHROPIC_API_KEY=... \
-  -e GEMINI_API_KEY=... \
   terradelta
 ```
 
@@ -137,7 +136,6 @@ server**.
 | Variable            | Required | Description                                                       |
 | ------------------- | -------- | ----------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY` | No       | Server fallback key for Claude. Users can supply their own in-app. |
-| `GEMINI_API_KEY`    | No       | Server fallback key for Gemini. `GOOGLE_API_KEY` also works.       |
 | `PORT`              | No       | Port the server listens on (default `32771`).                      |
 
 All AI provider/model/key selection is also available at runtime in the app's
@@ -148,7 +146,7 @@ settings (⚙), stored per-browser in `localStorage`.
 ```
 app/                 Next.js App Router (UI page, layout, /api/analyze route, favicon)
 components/          React components (CompareView, ReportTable, Settings modal, Onboarding, …)
-lib/                 align.ts (OpenCV), tiles.ts, prompt.ts, claude.ts, gemini.ts, detect.ts, i18n.ts, theme.ts
+lib/                 align.ts (OpenCV), tiles.ts, prompt.ts, claude.ts, detect.ts, i18n.ts, theme.ts
 Dockerfile           Multi-stage production image (standalone)
 docker-compose.yml   One-command run
 ```
@@ -156,7 +154,7 @@ docker-compose.yml   One-command run
 ## 🛠️ Tech stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · OpenCV.js (WASM/asm.js) ·
-Anthropic SDK · Google Gemini REST.
+Anthropic SDK.
 
 ## 🔒 Security
 
