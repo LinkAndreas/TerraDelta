@@ -9,7 +9,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          source: "."
+          target: "~/terradelta"
+
+      - name: Build and Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
@@ -17,5 +29,4 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           script: |
             cd ~/terradelta
-            git pull origin main
             docker compose up -d --build
