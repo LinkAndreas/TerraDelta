@@ -32,11 +32,11 @@ export default function Onboarding({ hasKey, hasRef, hasTarget, hasResult, onClo
   const activeIndex = steps.findIndex((s) => !s.done && !s.optional);
 
   return (
-    <div className="card onboard" style={{ marginBottom: 16 }}>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+    <div className="card onboard" style={{ marginBottom: 20 }}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div>
-          <strong style={{ fontSize: 16 }}>👋 {t("onboard.heading")}</strong>
-          <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+          <strong style={{ fontSize: 20, display: "block", marginBottom: 4 }}>👋 {t("onboard.heading")}</strong>
+          <div className="muted" style={{ fontSize: 14.5 }}>
             {t("onboard.subtitle")}
           </div>
         </div>
@@ -52,15 +52,15 @@ export default function Onboarding({ hasKey, hasRef, hasTarget, hasResult, onClo
             <li key={s.label} className={`onboard-step onboard-${state}`}>
               <span className="onboard-dot">{s.done ? "✓" : i + 1}</span>
               <div>
-                <div style={{ fontWeight: 600 }}>
+                <div style={{ fontWeight: 600, fontSize: 15.5 }}>
                   {t(s.label)}
                   {s.optional && !s.done && (
-                    <span className="pill" style={{ marginLeft: 8, fontSize: 11 }}>
+                    <span className="pill" style={{ marginLeft: 8, fontSize: 12 }}>
                       {t("onboard.optional")}
                     </span>
                   )}
                 </div>
-                <div className="muted" style={{ fontSize: 12.5 }}>
+                <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>
                   {t(s.hint)}
                 </div>
               </div>
