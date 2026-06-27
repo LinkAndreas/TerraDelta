@@ -254,7 +254,7 @@ export default function Home() {
             title={t("onboard.tipReopen")}
             style={{ fontSize: 13, fontWeight: 600 }}
           >
-            ? {t("onboard.reopen")}
+            {t("onboard.reopen")}
           </button>
           <select
             className="lang"
