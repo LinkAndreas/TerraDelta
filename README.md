@@ -82,7 +82,7 @@ docker compose up -d --build
 
 ```bash
 docker build -t terradelta .
-docker run -d -p 3000:3000 --name terradelta terradelta
+docker run -d -p 32771:3000 --name terradelta terradelta
 ```
 
 API keys are **optional** at the container level — pass them only if you want a
@@ -109,15 +109,15 @@ server**.
    cd terradelta
    docker compose up -d --build
    ```
-   The app now listens on port **3000**.
+   The app now listens on port **32771**.
 3. **Point your domain & add HTTPS.** Put a reverse proxy in front (Hostinger's
-   panel, or Nginx + Certbot) mapping your domain to `127.0.0.1:3000`. Minimal
+   panel, or Nginx + Certbot) mapping your domain to `127.0.0.1:32771`. Minimal
    Nginx site:
    ```nginx
    server {
      server_name terradelta.example.com;
      location / {
-       proxy_pass http://127.0.0.1:3000;
+       proxy_pass http://127.0.0.1:32771;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
        proxy_set_header X-Forwarded-Proto $scheme;
