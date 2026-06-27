@@ -580,3 +580,57 @@ select.lang {
   color: #04210f;
   border-color: #22c55e;
 }
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .container {
+    padding: 16px 14px 60px;
+  }
+  .topbar {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .card {
+    padding: 16px;
+  }
+  .wordmark {
+    font-size: 28px;
+  }
+  h1 {
+    font-size: 26px;
+  }
+  h2 {
+    font-size: 20px;
+  }
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .modal-panel {
+    max-width: 100%;
+    margin: 0;
+  }
+  .modal-backdrop {
+    padding: 16px;
+  }
+  .onboard-step {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .icon-btn {
+    padding: 10px 14px;
+  }
+  button {
+    width: 100%;
+  }
+  .topbar .row {
+    width: 100%;
+  }
+  .topbar .row button, .topbar .row select {
+    flex: 1;
+  }
+  .field-select {
+    min-width: auto;
+    width: 100%;
+  }
+}

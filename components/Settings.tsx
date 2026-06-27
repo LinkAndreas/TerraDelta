@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { PROVIDERS, PROVIDER_KEYS, type Provider } from "@/lib/models";
+import { PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n } from "@/lib/i18n";
 
 interface Props {
@@ -53,31 +53,6 @@ export default function Settings({
         </div>
 
         <div className="modal-body">
-          <div title={t("settings.tipProvider")}>
-            <div className="field-label">{t("settings.provider")}</div>
-            <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
-              {PROVIDER_KEYS.map((p) => (
-                <label
-                  key={p}
-                  className="provider-option"
-                  data-active={provider === p}
-                  style={{ flex: "1 1 200px" }}
-                >
-                  <input
-                    type="radio"
-                    name="provider"
-                    checked={provider === p}
-                    onChange={() => {
-                      setProvider(p);
-                      setModel(PROVIDERS[p].defaultModel);
-                    }}
-                  />
-                  {PROVIDERS[p].label}
-                </label>
-              ))}
-            </div>
-          </div>
-
           <div title={t("settings.tipModel")}>
             <div className="field-label">{t("settings.model")}</div>
             <select value={model} onChange={(e) => setModel(e.target.value)} className="field-select">

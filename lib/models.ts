@@ -1,7 +1,7 @@
 // Client-safe provider/model metadata (no server SDK imports — safe to import
 // from React components).
 
-export type Provider = "anthropic" | "gemini";
+export type Provider = "anthropic";
 
 export interface ProviderMeta {
   label: string;
@@ -18,13 +18,6 @@ export const PROVIDERS: Record<Provider, ProviderMeta> = {
     defaultModel: "claude-opus-4-8",
     keyHint: "sk-ant-…",
     keysUrl: "https://console.anthropic.com/settings/keys",
-  },
-  gemini: {
-    label: "Google — Gemini",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
-    defaultModel: "gemini-2.5-pro",
-    keyHint: "AIza…",
-    keysUrl: "https://aistudio.google.com/apikey",
   },
 };
 

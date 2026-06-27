@@ -37,7 +37,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
       }}
       title={t("upload.tip")}
       style={{
-        flex: 1,
+        flex: "1 1 260px",
         minHeight: 150,
         border: `2px dashed ${drag ? "var(--accent)" : "var(--border)"}`,
         borderRadius: 10,

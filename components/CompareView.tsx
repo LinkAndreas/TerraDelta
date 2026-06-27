@@ -191,15 +191,15 @@ export default function CompareView({
       </div>
 
       {mode === "side" ? (
-        <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
-          <div style={{ flex: 1 }}>
+        <div className="row" style={{ gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 280px" }}>
             <div style={frameStyle}>
               <img src={refUrl} alt="earlier" style={imgStyle} draggable={false} />
               {overlay("mask-side-a")}
               <span style={badge("left")}>◀ {t("badge.earlier")}</span>
             </div>
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: "1 1 280px" }}>
             <div style={frameStyle}>
               <img src={targetUrl} alt="later" style={imgStyle} draggable={false} />
               {overlay("mask-side-b")}
