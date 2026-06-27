@@ -1,0 +1,30 @@
+{
+  "name": "terradelta",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered semantic change detection for aerial orthophotos.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.106.0",
+    "@techstark/opencv-js": "^5.0.0-release.1",
+    "next": "^16.2.9",
+    "postcss": "^8.5.15",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
+  }
+}

@@ -1,0 +1,13 @@
+services:
+  terradelta:
+    build: .
+    image: terradelta:latest
+    container_name: terradelta
+    ports:
+      - "3000:3000"
+    environment:
+      # All optional — users can also enter their key in the app UI.
+      # Values come from a local .env file or the host environment.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    restart: unless-stopped
