@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./app/icon.svg" alt="TerraDelta Logo" width="120" height="120" />
+
 # TerraDelta
 
 **AI-powered semantic change detection for aerial orthophotos.**
