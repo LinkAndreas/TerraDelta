@@ -9,7 +9,7 @@
 *Terra* (the earth, from above) + *Delta* (Δ — the symbol for change).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-e08a5a.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg)](https://www.typescriptlang.org/)
 [![Docker ready](https://img.shields.io/badge/Docker-ready-2496ed.svg)](#-run-with-docker)
 
@@ -89,7 +89,7 @@ API keys are **optional** at the container level — pass them only if you want 
 server fallback:
 
 ```bash
-docker run -d -p 3000:3000 \
+docker run -d -p 32771:3000 \
   -e ANTHROPIC_API_KEY=... \
   -e GEMINI_API_KEY=... \
   terradelta
@@ -103,12 +103,13 @@ server**.
 
 1. **Create a VPS** in hPanel and choose the **Docker / Ubuntu** template (or
    install Docker manually: `curl -fsSL https://get.docker.com | sh`).
-2. **SSH in** and clone the repo:
-   ```bash
-   git clone https://github.com/<your-username>/terradelta.git
-   cd terradelta
-   docker compose up -d --build
-   ```
+2. **Automate Deployment via GitHub Actions**:
+   In your GitHub repository, go to **Settings > Secrets and variables > Actions** and add:
+   - `HOSTINGER_HOST`: Your VPS IP address
+   - `HOSTINGER_USERNAME`: Your SSH user (e.g., `root`)
+   - `HOSTINGER_SSH_KEY`: Your private SSH key
+
+   Push to the `main` branch. The included Action will automatically deploy the app to `~/terradelta` and run Docker.
    The app now listens on port **32771**.
 3. **Point your domain & add HTTPS.** Put a reverse proxy in front (Hostinger's
    panel, or Nginx + Certbot) mapping your domain to `127.0.0.1:32771`. Minimal
@@ -125,7 +126,7 @@ server**.
    }
    ```
    Then issue a certificate with `certbot --nginx`.
-4. **Update later** with `git pull && docker compose up -d --build`.
+4. **Update later**: Just merge or push your changes to the `main` branch. The GitHub Action will deploy them automatically!
 
 > **Alternative (no Docker):** on any Node 20+ host run
 > `npm ci && npm run build && npm start` (optionally under `pm2`). The standalone
@@ -154,7 +155,7 @@ docker-compose.yml   One-command run
 
 ## 🛠️ Tech stack
 
-Next.js 14 (App Router) · React 18 · TypeScript · OpenCV.js (WASM/asm.js) ·
+Next.js 16 (App Router) · React 19 · TypeScript · OpenCV.js (WASM/asm.js) ·
 Anthropic SDK · Google Gemini REST.
 
 ## 🔒 Security
