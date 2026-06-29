@@ -219,9 +219,10 @@ export default function CompareView({
           {mode === "new" && <img src={targetUrl} alt="later" style={imgStyle} draggable={false} />}
           {mode === "slider" && (
             <>
+              <img src={targetUrl} alt="later" style={imgStyle} draggable={false} />
               <img
-                src={targetUrl}
-                alt="later"
+                src={refUrl}
+                alt="earlier"
                 style={{ ...imgStyle, clipPath: `inset(0 ${100 - wipe}% 0 0)` }}
                 draggable={false}
               />
@@ -264,20 +265,12 @@ export default function CompareView({
                     background: "rgba(255,255,255,0.95)",
                     border: "2px solid var(--accent)",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#1a1f2b",
-                    fontSize: 15,
-                    fontWeight: 800,
                     userSelect: "none",
                   }}
-                >
-                  ⟺
-                </div>
+                />
               </div>
-              <span style={badge("left")}>◀ {t("badge.later")}</span>
-              <span style={badge("right")}>{t("badge.earlier")} ▶</span>
+              <span style={badge("left")}>◀ {t("badge.earlier")}</span>
+              <span style={badge("right")}>{t("badge.later")} ▶</span>
             </>
           )}
           {overlay("mask-single")}
