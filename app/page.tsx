@@ -66,7 +66,6 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [autoUpscale, setAutoUpscale] = useState(false);
 
   useEffect(() => {
     setShowGuide(localStorage.getItem("orthophoto-diff:onboarded") !== "1");
@@ -135,35 +134,8 @@ export default function Home() {
 
       setStage("aligning");
 
-      // Optionally upscale before alignment — original URLs are kept for the
-      // upload-zone previews; only the processed outputs reach CompareView.
-      let processRefUrl = refUrl;
-      let processTargetUrl = targetUrl;
-      if (autoUpscale) {
-        setProgressMsg(t("progress.analyzingRes"));
-        const [refThumb, tgtThumb] = await Promise.all([
-          thumbnailDataUrl(refUrl, 512),
-          thumbnailDataUrl(targetUrl, 512),
-        ]);
-        const res = await fetch("/api/upscale-suggest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            refUrl: refThumb,
-            targetUrl: tgtThumb,
-            apiKey: keys[provider] || undefined,
-          }),
-        });
-        const { factor = 1 } = (await res.json()) as { factor?: number };
-        if (factor > 1) {
-          setProgressMsg(t("progress.upscaling", { factor }));
-          const { upscaleImage } = await import("@/lib/upscale");
-          [processRefUrl, processTargetUrl] = await Promise.all([
-            upscaleImage(refUrl, factor),
-            upscaleImage(targetUrl, factor),
-          ]);
-        }
-      }
+      const processRefUrl = refUrl;
+      const processTargetUrl = targetUrl;
 
       setProgressMsg(t("progress.aligning"));
       const aligned = await alignImages(processRefUrl, processTargetUrl, 2600);
@@ -363,20 +335,6 @@ export default function Home() {
           )}
         </div>
 
-        <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span className="muted" style={{ fontSize: 13 }} title={t("run.tipUpscale")}>
-            {t("run.upscale")}:
-          </span>
-          <div className="segmented" role="group" title={t("run.tipUpscale")}>
-            <button aria-pressed={!autoUpscale} onClick={() => setAutoUpscale(false)}>
-              {t("run.upscaleOff")}
-            </button>
-            <button aria-pressed={autoUpscale} onClick={() => setAutoUpscale(true)}>
-              {t("run.upscaleAuto")}
-            </button>
-          </div>
-        </div>
-
         {!hasKey && (
           <button
             className="link-hint"
@@ -486,25 +444,6 @@ export default function Home() {
       />
     </div>
   );
-}
-
-// Downsamples a data-URL image to a thumbnail for lightweight API calls.
-function thumbnailDataUrl(src: string, size: number): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      if (img.naturalWidth <= size && img.naturalHeight <= size) {
-        resolve(src);
-        return;
-      }
-      const ar = img.naturalWidth / img.naturalHeight;
-      const canvas = document.createElement("canvas");
-      [canvas.width, canvas.height] = ar > 1 ? [size, Math.round(size / ar)] : [Math.round(size * ar), size];
-      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.7));
-    };
-    img.src = src;
-  });
 }
 
 // Runs `worker` over `items` with at most `limit` in flight; preserves order.

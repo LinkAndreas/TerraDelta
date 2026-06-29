@@ -53,10 +53,6 @@ export const STRINGS = {
     "run.aligning": "Aligning images…",
     "run.analyzing": "Detecting changes…",
     "run.tip": "Align both images and analyze them for semantic changes.",
-    "run.upscale": "Upscale",
-    "run.upscaleOff": "Off",
-    "run.upscaleAuto": "AI auto",
-    "run.tipUpscale": "Let the AI model evaluate image resolution and automatically choose the optimal upscaling factor before alignment and analysis.",
 
     "step.load": "Load engine",
     "step.align": "Align",
@@ -65,8 +61,6 @@ export const STRINGS = {
     "progress.initEngine":
       "Initializing alignment engine (OpenCV, bundled locally — first run only)…",
     "progress.engineReady": "Alignment engine ready.",
-    "progress.analyzingRes": "Asking AI to assess image resolution…",
-    "progress.upscaling": "Upscaling images {factor}× (AI-recommended)…",
     "progress.aligning": "Co-registering images — ORB feature matching + RANSAC homography…",
     "progress.splitting": "Splitting the scene into high-resolution regions…",
     "progress.region": "Analyzing region {done}/{total} with the vision model…",
@@ -222,10 +216,6 @@ export const STRINGS = {
     "run.aligning": "Richte Bilder aus…",
     "run.analyzing": "Erkenne Veränderungen…",
     "run.tip": "Beide Bilder ausrichten und auf semantische Veränderungen analysieren.",
-    "run.upscale": "Hochskalierung",
-    "run.upscaleOff": "Aus",
-    "run.upscaleAuto": "KI automatisch",
-    "run.tipUpscale": "Die KI bewertet die Bildauflösung und wählt automatisch den optimalen Skalierungsfaktor vor der Ausrichtung und Analyse.",
 
     "step.load": "Engine laden",
     "step.align": "Ausrichten",
@@ -234,8 +224,6 @@ export const STRINGS = {
     "progress.initEngine":
       "Initialisiere Ausrichtungs-Engine (OpenCV, lokal gebündelt — nur beim ersten Lauf)…",
     "progress.engineReady": "Ausrichtungs-Engine bereit.",
-    "progress.analyzingRes": "KI analysiert Bildauflösung…",
-    "progress.upscaling": "Bilder werden {factor}× hochskaliert (KI-empfohlen)…",
     "progress.aligning": "Überlagere Bilder — ORB-Merkmalsabgleich + RANSAC-Homographie…",
     "progress.splitting": "Zerlege die Szene in hochaufgelöste Regionen…",
     "progress.region": "Analysiere Region {done}/{total} mit dem Bildmodell…",
