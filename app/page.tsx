@@ -66,6 +66,7 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [upscaleFactor, setUpscaleFactor] = useState<1 | 2 | 3 | 4>(1);
 
   useEffect(() => {
     setShowGuide(localStorage.getItem("orthophoto-diff:onboarded") !== "1");
@@ -133,8 +134,22 @@ export default function Home() {
       await loadOpenCv();
 
       setStage("aligning");
+
+      // Upscale before alignment if requested — original URLs are kept for the
+      // upload-zone previews; only the aligned outputs reach CompareView.
+      let processRefUrl = refUrl;
+      let processTargetUrl = targetUrl;
+      if (upscaleFactor > 1) {
+        setProgressMsg(t("progress.upscaling", { factor: upscaleFactor }));
+        const { upscaleImage } = await import("@/lib/upscale");
+        [processRefUrl, processTargetUrl] = await Promise.all([
+          upscaleImage(refUrl, upscaleFactor),
+          upscaleImage(targetUrl, upscaleFactor),
+        ]);
+      }
+
       setProgressMsg(t("progress.aligning"));
-      const aligned = await alignImages(refUrl, targetUrl, 2600);
+      const aligned = await alignImages(processRefUrl, processTargetUrl, 2600);
       setAlign(aligned);
 
       setStage("analyzing");
@@ -329,6 +344,24 @@ export default function Home() {
                 : t("align.fallback")}
             </span>
           )}
+        </div>
+
+        <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span className="muted" style={{ fontSize: 13 }} title={t("run.tipUpscale")}>
+            {t("run.upscale")}:
+          </span>
+          <div className="segmented" role="group" title={t("run.tipUpscale")}>
+            {([1, 2, 3, 4] as const).map((f) => (
+              <button
+                key={f}
+                aria-pressed={upscaleFactor === f}
+                onClick={() => setUpscaleFactor(f)}
+                style={{ minWidth: 38 }}
+              >
+                {f === 1 ? t("run.upscaleOff") : `${f}×`}
+              </button>
+            ))}
+          </div>
         </div>
 
         {!hasKey && (

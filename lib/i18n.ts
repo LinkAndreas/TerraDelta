@@ -53,6 +53,9 @@ export const STRINGS = {
     "run.aligning": "Aligning images…",
     "run.analyzing": "Detecting changes…",
     "run.tip": "Align both images and analyze them for semantic changes.",
+    "run.upscale": "Upscale",
+    "run.upscaleOff": "Off",
+    "run.tipUpscale": "Scale up both images before alignment and analysis. Improves detection quality for low-resolution images at the cost of longer processing time.",
 
     "step.load": "Load engine",
     "step.align": "Align",
@@ -61,6 +64,7 @@ export const STRINGS = {
     "progress.initEngine":
       "Initializing alignment engine (OpenCV, bundled locally — first run only)…",
     "progress.engineReady": "Alignment engine ready.",
+    "progress.upscaling": "Upscaling images {factor}× for higher resolution analysis…",
     "progress.aligning": "Co-registering images — ORB feature matching + RANSAC homography…",
     "progress.splitting": "Splitting the scene into high-resolution regions…",
     "progress.region": "Analyzing region {done}/{total} with the vision model…",
@@ -216,6 +220,9 @@ export const STRINGS = {
     "run.aligning": "Richte Bilder aus…",
     "run.analyzing": "Erkenne Veränderungen…",
     "run.tip": "Beide Bilder ausrichten und auf semantische Veränderungen analysieren.",
+    "run.upscale": "Hochskalierung",
+    "run.upscaleOff": "Aus",
+    "run.tipUpscale": "Beide Bilder vor Ausrichtung und Analyse hochskalieren. Verbessert die Erkennungsqualität bei niedrig aufgelösten Bildern, erhöht jedoch die Verarbeitungszeit.",
 
     "step.load": "Engine laden",
     "step.align": "Ausrichten",
@@ -224,6 +231,7 @@ export const STRINGS = {
     "progress.initEngine":
       "Initialisiere Ausrichtungs-Engine (OpenCV, lokal gebündelt — nur beim ersten Lauf)…",
     "progress.engineReady": "Ausrichtungs-Engine bereit.",
+    "progress.upscaling": "Bilder werden {factor}× hochskaliert für höhere Auflösungsanalyse…",
     "progress.aligning": "Überlagere Bilder — ORB-Merkmalsabgleich + RANSAC-Homographie…",
     "progress.splitting": "Zerlege die Szene in hochaufgelöste Regionen…",
     "progress.region": "Analysiere Region {done}/{total} mit dem Bildmodell…",
