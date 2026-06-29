@@ -13,6 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
     "@techstark/opencv-js": "^5.0.0-release.1",
+    "geotiff": "^3.0.5",
     "jspdf": "^4.2.1",
     "next": "^16.2.9",
     "postcss": "^8.5.15",
