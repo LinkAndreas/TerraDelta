@@ -20,16 +20,6 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
 
   const toJpeg = (canvas: HTMLCanvasElement) => canvas.toDataURL("image/jpeg", 0.92);
 
-  const canvasFromBitmap = async (blob: Blob): Promise<HTMLCanvasElement> => {
-    const bitmap = await createImageBitmap(blob);
-    const c = document.createElement("canvas");
-    c.width = bitmap.width;
-    c.height = bitmap.height;
-    c.getContext("2d")!.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    return c;
-  };
-
   const handle = (file: File | undefined) => {
     if (!file) return;
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -42,44 +32,45 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
       const reader = new FileReader();
       reader.onload = async () => {
         const buffer = reader.result as ArrayBuffer;
+        const blob = new Blob([buffer], { type: "image/tiff" });
 
-        // 1. Try native browser decode (Safari on macOS supports TIFF natively)
+        // 1. Try native browser decode via object URL (works in Safari on macOS)
         try {
-          const blob = new Blob([buffer], { type: "image/tiff" });
-          const canvas = await canvasFromBitmap(blob);
+          const objectUrl = URL.createObjectURL(blob);
+          const canvas = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+              if (!img.naturalWidth || !img.naturalHeight) {
+                reject(new Error("zero dimensions"));
+                return;
+              }
+              const c = document.createElement("canvas");
+              c.width = img.naturalWidth;
+              c.height = img.naturalHeight;
+              c.getContext("2d")!.drawImage(img, 0, 0);
+              resolve(c);
+            };
+            img.onerror = reject;
+            img.src = objectUrl;
+          });
+          URL.revokeObjectURL(objectUrl);
           onFile(toJpeg(canvas));
           return;
         } catch {
-          // Browser doesn't support TIFF natively — fall through to utif
+          // Browser can't decode TIFF natively (Chrome/Firefox) — fall through
         }
 
-        // 2. utif fallback with strict dimension validation
+        // 2. Server-side conversion via sharp (handles all TIFF variants)
         try {
-          const UTIF = await import("utif");
-          const ifds = UTIF.decode(buffer);
-          if (!ifds.length) throw new Error("no IFDs");
-          UTIF.decodeImage(buffer, ifds[0]);
-          const ifd = ifds[0];
-          const rgba = UTIF.toRGBA8(ifd);
-          const width = ifd.width;
-          const height = ifd.height;
-
-          // Guard against corrupt dimension metadata producing garbled output
-          if (!width || !height || rgba.length !== width * height * 4) {
-            throw new Error(`size mismatch: ${rgba.length} vs ${width}×${height}×4=${width * height * 4}`);
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d")!;
-          const imgData = ctx.createImageData(width, height);
-          imgData.data.set(rgba);
-          ctx.putImageData(imgData, 0, 0);
-          onFile(toJpeg(canvas));
+          const form = new FormData();
+          form.append("file", blob, file.name);
+          const res = await fetch("/api/tiff", { method: "POST", body: form });
+          const json = await res.json();
+          if (!res.ok || json.error) throw new Error(json.error ?? "Server conversion failed");
+          onFile(json.dataUrl as string);
         } catch (err) {
           setTiffError(t("upload.tiffError" as StringKey));
-          console.warn("TIFF decode failed:", err);
+          console.warn("TIFF conversion failed:", err);
         }
       };
       reader.readAsArrayBuffer(file);
