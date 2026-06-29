@@ -38,3 +38,6 @@ export const CHANGE_COLORS: Record<ChangeType, string> = {
   removed: "#ef4444", // red
   modified: "#f59e0b", // amber
 };
+
+export const CONF_PCT: Record<Confidence, number> = { low: 35, medium: 65, high: 90 };
+export const confLabel = (c: Confidence): string => `${CONF_PCT[c]}%`;

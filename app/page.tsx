@@ -133,8 +133,12 @@ export default function Home() {
       await loadOpenCv();
 
       setStage("aligning");
+
+      const processRefUrl = refUrl;
+      const processTargetUrl = targetUrl;
+
       setProgressMsg(t("progress.aligning"));
-      const aligned = await alignImages(refUrl, targetUrl, 2600);
+      const aligned = await alignImages(processRefUrl, processTargetUrl, 2600);
       setAlign(aligned);
 
       setStage("analyzing");
@@ -403,6 +407,8 @@ export default function Home() {
             setMinConf={setMinConf}
             query={query}
             setQuery={setQuery}
+            refUrl={align.refUrl}
+            targetUrl={align.targetUrl}
           />
         </>
       )}

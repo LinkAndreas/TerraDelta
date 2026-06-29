@@ -1,6 +1,7 @@
 "use client";
 
-import { CHANGE_COLORS, type Change, type ChangeType, type Confidence } from "@/lib/types";
+import { useState } from "react";
+import { CHANGE_COLORS, confLabel, type Change, type ChangeType, type Confidence } from "@/lib/types";
 import { useI18n, type StringKey } from "@/lib/i18n";
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   setMinConf: (c: Confidence) => void;
   query: string;
   setQuery: (q: string) => void;
+  refUrl?: string;
+  targetUrl?: string;
 }
 
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
@@ -29,14 +32,28 @@ export default function ReportTable({
   setMinConf,
   query,
   setQuery,
+  refUrl,
+  targetUrl,
 }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const [exporting, setExporting] = useState(false);
   const counts: Record<ChangeType, number> = { added: 0, removed: 0, modified: 0 };
   for (const c of changes) counts[c.change_type]++;
 
   const rows = changes
     .map((c, i) => ({ c, n: i + 1 }))
     .filter(({ c }) => visibleIds.has(c.id));
+
+  async function handleExportPdf() {
+    if (!refUrl || !targetUrl || exporting) return;
+    setExporting(true);
+    try {
+      const { exportPdf } = await import("@/lib/pdf");
+      await exportPdf({ refUrl, targetUrl, changes, lang });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const catLabel = (cat: string) => {
     const key = `cat.${cat}` as StringKey;
@@ -52,8 +69,13 @@ export default function ReportTable({
             ? t("report.headingOf", { n: rows.length, total: changes.length })
             : t("report.heading", { n: changes.length })}
         </strong>
-        <button className="btn-secondary" onClick={() => downloadCsv(changes)} title={t("report.tipExport")}>
-          {t("report.export")}
+        <button
+          className="btn-secondary"
+          onClick={handleExportPdf}
+          disabled={!refUrl || !targetUrl || exporting}
+          title={t("report.tipExport")}
+        >
+          {exporting ? <><span className="spinner" /> Generating…</> : t("report.export")}
         </button>
       </div>
 
@@ -124,7 +146,7 @@ export default function ReportTable({
                   </td>
                   <td>{catLabel(c.category)}</td>
                   <td>{c.description}</td>
-                  <td>{t(`conf.${c.confidence}` as StringKey)}</td>
+                  <td>{confLabel(c.confidence)}</td>
                 </tr>
               );
             })}
@@ -135,22 +157,3 @@ export default function ReportTable({
   );
 }
 
-function downloadCsv(changes: Change[]) {
-  const header = ["#", "change_type", "category", "description", "confidence", "x", "y", "w", "h"];
-  const rows = changes.map((c, i) => [
-    i + 1,
-    c.change_type,
-    c.category,
-    c.description.replace(/"/g, '""'),
-    c.confidence,
-    ...c.bbox.map((n) => n.toFixed(4)),
-  ]);
-  const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell)}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "orthophoto-changes.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}

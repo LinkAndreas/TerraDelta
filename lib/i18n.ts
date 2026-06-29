@@ -45,7 +45,8 @@ export const STRINGS = {
     "upload.later": "Later capture",
     "upload.laterSub": "e.g. 2025",
     "upload.hint": "Click or drop an image",
-    "upload.tip": "Upload an aerial/orthophoto image (PNG or JPEG).",
+    "upload.tip": "Upload an aerial/orthophoto image (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tiffError": "Could not decode this TIFF — the file may use an unsupported encoding (e.g. tiled, 16-bit float, or proprietary GeoTIFF). Try exporting as PNG or JPEG.",
 
     "run.detect": "Detect changes",
     "run.loading": "Loading alignment engine…",
@@ -101,20 +102,29 @@ export const STRINGS = {
 
     "report.heading": "Change report ({n})",
     "report.headingOf": "Change report ({n} of {total})",
-    "report.export": "Export CSV",
-    "report.tipExport": "Download all detected changes as a CSV file.",
+    "report.export": "Export PDF",
+    "report.tipExport": "Download a professional PDF report with annotated images and change table.",
+
+    "pdf.title": "Change Report",
+    "pdf.subtitle": "Orthophoto Change Analysis",
+    "pdf.earlier": "Earlier image",
+    "pdf.later": "Later image",
+    "pdf.changes": "Detected Changes",
+    "pdf.generated": "Generated on {date}",
+    "pdf.page": "Page {n} of {total}",
+    "pdf.tagline": "Orthophoto change analyzer",
     "report.minConf": "min",
     "report.tipMinConf": "Hide changes below this confidence level.",
     "report.search": "Search…",
     "report.noMatch": "No changes match the current filters.",
     "report.tipType": "Show or hide this change type.",
 
-    "conf.any": "any confidence",
-    "conf.mediumPlus": "medium+",
-    "conf.highOnly": "high only",
-    "conf.low": "low",
-    "conf.medium": "medium",
-    "conf.high": "high",
+    "conf.any": "any",
+    "conf.mediumPlus": "≥ 65%",
+    "conf.highOnly": "≥ 90%",
+    "conf.low": "35%",
+    "conf.medium": "65%",
+    "conf.high": "90%",
 
     "type.added": "added",
     "type.removed": "removed",
@@ -124,7 +134,7 @@ export const STRINGS = {
     "th.type": "Type",
     "th.category": "Category",
     "th.description": "Description",
-    "th.conf": "Conf.",
+    "th.conf": "Confidence",
 
     "cat.building": "building",
     "cat.house": "house",
@@ -158,7 +168,7 @@ export const STRINGS = {
     "onboard.runHint": "We align both images and analyze them region by region.",
     "onboard.explore": "Explore the results",
     "onboard.exploreHint":
-      "Drag the slider, switch to side-by-side, filter by type/confidence, and export to CSV.",
+      "Drag the slider, switch to side-by-side, filter by type/confidence, and export to PDF.",
   },
 
   de: {
@@ -198,7 +208,8 @@ export const STRINGS = {
     "upload.later": "Spätere Aufnahme",
     "upload.laterSub": "z. B. 2025",
     "upload.hint": "Bild anklicken oder hineinziehen",
-    "upload.tip": "Laden Sie ein Luft-/Orthophoto hoch (PNG oder JPEG).",
+    "upload.tip": "Laden Sie ein Luft-/Orthophoto hoch (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tiffError": "Dieses TIFF konnte nicht dekodiert werden — die Datei verwendet möglicherweise eine nicht unterstützte Kodierung (z. B. Kacheln, 16-Bit-Float oder proprietäres GeoTIFF). Versuchen Sie, als PNG oder JPEG zu exportieren.",
 
     "run.detect": "Veränderungen erkennen",
     "run.loading": "Lade Ausrichtungs-Engine…",
@@ -254,20 +265,29 @@ export const STRINGS = {
 
     "report.heading": "Veränderungsbericht ({n})",
     "report.headingOf": "Veränderungsbericht ({n} von {total})",
-    "report.export": "CSV exportieren",
-    "report.tipExport": "Alle erkannten Veränderungen als CSV-Datei herunterladen.",
+    "report.export": "PDF exportieren",
+    "report.tipExport": "Professionellen PDF-Bericht mit annotierten Bildern und Veränderungstabelle herunterladen.",
+
+    "pdf.title": "Veränderungsbericht",
+    "pdf.subtitle": "Orthophoto-Veränderungsanalyse",
+    "pdf.earlier": "Früheres Bild",
+    "pdf.later": "Späteres Bild",
+    "pdf.changes": "Erkannte Veränderungen",
+    "pdf.generated": "Erstellt am {date}",
+    "pdf.page": "Seite {n} von {total}",
+    "pdf.tagline": "Orthophoto-Veränderungsanalyse",
     "report.minConf": "min",
     "report.tipMinConf": "Veränderungen unterhalb dieser Konfidenz ausblenden.",
     "report.search": "Suchen…",
     "report.noMatch": "Keine Veränderungen passen zu den aktuellen Filtern.",
     "report.tipType": "Diesen Veränderungstyp ein-/ausblenden.",
 
-    "conf.any": "beliebige Konfidenz",
-    "conf.mediumPlus": "mittel+",
-    "conf.highOnly": "nur hoch",
-    "conf.low": "niedrig",
-    "conf.medium": "mittel",
-    "conf.high": "hoch",
+    "conf.any": "beliebig",
+    "conf.mediumPlus": "≥ 65%",
+    "conf.highOnly": "≥ 90%",
+    "conf.low": "35%",
+    "conf.medium": "65%",
+    "conf.high": "90%",
 
     "type.added": "hinzugefügt",
     "type.removed": "entfernt",
@@ -277,7 +297,7 @@ export const STRINGS = {
     "th.type": "Typ",
     "th.category": "Kategorie",
     "th.description": "Beschreibung",
-    "th.conf": "Konf.",
+    "th.conf": "Konfidenz",
 
     "cat.building": "Gebäude",
     "cat.house": "Haus",
@@ -312,7 +332,7 @@ export const STRINGS = {
     "onboard.runHint": "Wir richten beide Bilder aus und analysieren sie Region für Region.",
     "onboard.explore": "Ergebnisse erkunden",
     "onboard.exploreHint":
-      "Ziehen Sie den Schieberegler, wechseln Sie zu Nebeneinander, filtern Sie nach Typ/Konfidenz und exportieren Sie als CSV.",
+      "Ziehen Sie den Schieberegler, wechseln Sie zu Nebeneinander, filtern Sie nach Typ/Konfidenz und exportieren Sie als PDF.",
   },
 } as const;
 
