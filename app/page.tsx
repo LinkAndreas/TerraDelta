@@ -66,7 +66,7 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [upscaleFactor, setUpscaleFactor] = useState<1 | 2 | 3 | 4>(1);
+  const [autoUpscale, setAutoUpscale] = useState(false);
 
   useEffect(() => {
     setShowGuide(localStorage.getItem("orthophoto-diff:onboarded") !== "1");
@@ -135,17 +135,34 @@ export default function Home() {
 
       setStage("aligning");
 
-      // Upscale before alignment if requested — original URLs are kept for the
-      // upload-zone previews; only the aligned outputs reach CompareView.
+      // Optionally upscale before alignment — original URLs are kept for the
+      // upload-zone previews; only the processed outputs reach CompareView.
       let processRefUrl = refUrl;
       let processTargetUrl = targetUrl;
-      if (upscaleFactor > 1) {
-        setProgressMsg(t("progress.upscaling", { factor: upscaleFactor }));
-        const { upscaleImage } = await import("@/lib/upscale");
-        [processRefUrl, processTargetUrl] = await Promise.all([
-          upscaleImage(refUrl, upscaleFactor),
-          upscaleImage(targetUrl, upscaleFactor),
+      if (autoUpscale) {
+        setProgressMsg(t("progress.analyzingRes"));
+        const [refThumb, tgtThumb] = await Promise.all([
+          thumbnailDataUrl(refUrl, 512),
+          thumbnailDataUrl(targetUrl, 512),
         ]);
+        const res = await fetch("/api/upscale-suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            refUrl: refThumb,
+            targetUrl: tgtThumb,
+            apiKey: keys[provider] || undefined,
+          }),
+        });
+        const { factor = 1 } = (await res.json()) as { factor?: number };
+        if (factor > 1) {
+          setProgressMsg(t("progress.upscaling", { factor }));
+          const { upscaleImage } = await import("@/lib/upscale");
+          [processRefUrl, processTargetUrl] = await Promise.all([
+            upscaleImage(refUrl, factor),
+            upscaleImage(targetUrl, factor),
+          ]);
+        }
       }
 
       setProgressMsg(t("progress.aligning"));
@@ -351,16 +368,12 @@ export default function Home() {
             {t("run.upscale")}:
           </span>
           <div className="segmented" role="group" title={t("run.tipUpscale")}>
-            {([1, 2, 3, 4] as const).map((f) => (
-              <button
-                key={f}
-                aria-pressed={upscaleFactor === f}
-                onClick={() => setUpscaleFactor(f)}
-                style={{ minWidth: 38 }}
-              >
-                {f === 1 ? t("run.upscaleOff") : `${f}×`}
-              </button>
-            ))}
+            <button aria-pressed={!autoUpscale} onClick={() => setAutoUpscale(false)}>
+              {t("run.upscaleOff")}
+            </button>
+            <button aria-pressed={autoUpscale} onClick={() => setAutoUpscale(true)}>
+              {t("run.upscaleAuto")}
+            </button>
           </div>
         </div>
 
@@ -473,6 +486,25 @@ export default function Home() {
       />
     </div>
   );
+}
+
+// Downsamples a data-URL image to a thumbnail for lightweight API calls.
+function thumbnailDataUrl(src: string, size: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth <= size && img.naturalHeight <= size) {
+        resolve(src);
+        return;
+      }
+      const ar = img.naturalWidth / img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      [canvas.width, canvas.height] = ar > 1 ? [size, Math.round(size / ar)] : [Math.round(size * ar), size];
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.7));
+    };
+    img.src = src;
+  });
 }
 
 // Runs `worker` over `items` with at most `limit` in flight; preserves order.

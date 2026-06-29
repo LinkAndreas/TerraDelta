@@ -206,8 +206,6 @@ export async function exportPdf(opts: {
     renderWithBoxes(targetUrl, changes, PX),
   ]);
 
-  const ar = refImg.ar;
-
   // ── calculate total pages ──────────────────────────────────────────────
   // Table rows: need to pre-measure line counts
   const colW = { num: 8, type: 24, cat: 26, conf: 18, desc: CW - 8 - 24 - 26 - 18 };
@@ -219,11 +217,25 @@ export async function exportPdf(opts: {
   // Rough estimate first to construct doc, then we'll correct it.
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-  // ── PAGE 1: Images ───────────────────────────────────────────────────────
+  // ── PAGE 1: Images (stacked vertically, one above the other) ────────────
   const HEADER_H = 26;
   const imgAreaY = HEADER_H + 10;
-  const imgW = (CW - 6) / 2; // two images with 6mm gap
-  const imgH = Math.min(imgW / ar, PH - imgAreaY - 50); // cap height
+
+  // Each image may use at most this much height so both fit on the page:
+  //   available = PH - imgAreaY - gapBetween(8) - legendZone(14) - footerZone(16)
+  //   each slot = available/2, image = slot - labelStrip(7.5) - bottomPad(2)
+  const IMG_MAX_H = Math.floor((PH - imgAreaY - 8 - 14 - 16) / 2) - 10;
+
+  // Fit image within (CW × IMG_MAX_H) preserving aspect ratio
+  function fitInSlot(ar: number): { w: number; h: number; xOff: number } {
+    const hByW = CW / ar;
+    if (hByW <= IMG_MAX_H) return { w: CW, h: hByW, xOff: 0 };
+    const w = IMG_MAX_H * ar;
+    return { w, h: IMG_MAX_H, xOff: (CW - w) / 2 };
+  }
+
+  const ref1 = fitInSlot(refImg.ar);
+  const tgt1 = fitInSlot(tgtImg.ar);
 
   drawPageHeader(doc, logoPng, false, t);
 
@@ -234,29 +246,32 @@ export async function exportPdf(opts: {
   setFont(doc, "normal", 8, MID);
   doc.text(t("pdf.generated", { date: dateStr }), PW - M, HEADER_H + 6, { align: "right" });
 
-  // Image panel backgrounds
-  doc.setFillColor(...LIGHT_BG);
-  doc.roundedRect(M, imgAreaY, imgW, imgH + 10, 2, 2, "F");
-  doc.roundedRect(M + imgW + 6, imgAreaY, imgW, imgH + 10, 2, 2, "F");
+  function drawImagePanel(
+    label: string, img: { dataUrl: string }, fit: { w: number; h: number; xOff: number }, panelY: number,
+  ) {
+    const panelH = fit.h + 10;
+    // Background
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(M, panelY, CW, panelH, 2, 2, "F");
+    // Label strip (brand color bar at top of panel)
+    doc.setFillColor(...BRAND);
+    doc.roundedRect(M, panelY, CW, 7, 2, 2, "F");
+    doc.rect(M, panelY + 3, CW, 4, "F"); // square bottom corners of strip
+    setFont(doc, "bold", 8.5, WHITE);
+    doc.text(label, M + CW / 2, panelY + 4.8, { align: "center" });
+    // Image (centered horizontally within the panel)
+    doc.addImage(img.dataUrl, "JPEG", M + fit.xOff + 1, panelY + 7.5, fit.w - 2, fit.h);
+  }
 
-  // Image labels (inside panel header strip)
-  doc.setFillColor(...BRAND);
-  doc.roundedRect(M, imgAreaY, imgW, 7, 2, 2, "F");
-  doc.rect(M, imgAreaY + 3, imgW, 4, "F"); // square bottom corners
-  doc.roundedRect(M + imgW + 6, imgAreaY, imgW, 7, 2, 2, "F");
-  doc.rect(M + imgW + 6, imgAreaY + 3, imgW, 4, "F");
+  // Earlier image (top)
+  drawImagePanel(t("pdf.earlier"), refImg, ref1, imgAreaY);
 
-  setFont(doc, "bold", 8.5, WHITE);
-  doc.text(t("pdf.earlier"), M + imgW / 2, imgAreaY + 4.8, { align: "center" });
-  doc.text(t("pdf.later"), M + imgW + 6 + imgW / 2, imgAreaY + 4.8, { align: "center" });
+  // Later image (below, with 8 mm gap)
+  const img2Y = imgAreaY + ref1.h + 10 + 8;
+  drawImagePanel(t("pdf.later"), tgtImg, tgt1, img2Y);
 
-  // Images
-  const imgY = imgAreaY + 7.5;
-  doc.addImage(refImg.dataUrl, "JPEG", M + 1, imgY, imgW - 2, imgH);
-  doc.addImage(tgtImg.dataUrl, "JPEG", M + imgW + 7, imgY, imgW - 2, imgH);
-
-  // Legend row below images
-  const legendY = imgAreaY + 10 + imgH + 6;
+  // Legend row below both images
+  const legendY = img2Y + tgt1.h + 10 + 6;
   const legendTypes: Array<{ key: StringKey; color: string }> = [
     { key: "type.added", color: CHANGE_COLORS.added },
     { key: "type.removed", color: CHANGE_COLORS.removed },
@@ -400,9 +415,11 @@ export async function exportPdf(opts: {
     setFont(doc, "bold", 7.5, WHITE);
     doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
 
-    // Category
+    // Category (localized — fall back to raw value for unknown categories)
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    doc.text(c.category, COL_X.cat + 2, rowMid);
+    const catKey = `cat.${c.category}` as StringKey;
+    const catStr = t(catKey) !== catKey ? t(catKey) : c.category;
+    doc.text(catStr, COL_X.cat + 2, rowMid);
 
     // Description (wrapped)
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);

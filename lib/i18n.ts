@@ -55,7 +55,8 @@ export const STRINGS = {
     "run.tip": "Align both images and analyze them for semantic changes.",
     "run.upscale": "Upscale",
     "run.upscaleOff": "Off",
-    "run.tipUpscale": "Scale up both images before alignment and analysis. Improves detection quality for low-resolution images at the cost of longer processing time.",
+    "run.upscaleAuto": "AI auto",
+    "run.tipUpscale": "Let the AI model evaluate image resolution and automatically choose the optimal upscaling factor before alignment and analysis.",
 
     "step.load": "Load engine",
     "step.align": "Align",
@@ -64,7 +65,8 @@ export const STRINGS = {
     "progress.initEngine":
       "Initializing alignment engine (OpenCV, bundled locally — first run only)…",
     "progress.engineReady": "Alignment engine ready.",
-    "progress.upscaling": "Upscaling images {factor}× for higher resolution analysis…",
+    "progress.analyzingRes": "Asking AI to assess image resolution…",
+    "progress.upscaling": "Upscaling images {factor}× (AI-recommended)…",
     "progress.aligning": "Co-registering images — ORB feature matching + RANSAC homography…",
     "progress.splitting": "Splitting the scene into high-resolution regions…",
     "progress.region": "Analyzing region {done}/{total} with the vision model…",
@@ -222,7 +224,8 @@ export const STRINGS = {
     "run.tip": "Beide Bilder ausrichten und auf semantische Veränderungen analysieren.",
     "run.upscale": "Hochskalierung",
     "run.upscaleOff": "Aus",
-    "run.tipUpscale": "Beide Bilder vor Ausrichtung und Analyse hochskalieren. Verbessert die Erkennungsqualität bei niedrig aufgelösten Bildern, erhöht jedoch die Verarbeitungszeit.",
+    "run.upscaleAuto": "KI automatisch",
+    "run.tipUpscale": "Die KI bewertet die Bildauflösung und wählt automatisch den optimalen Skalierungsfaktor vor der Ausrichtung und Analyse.",
 
     "step.load": "Engine laden",
     "step.align": "Ausrichten",
@@ -231,7 +234,8 @@ export const STRINGS = {
     "progress.initEngine":
       "Initialisiere Ausrichtungs-Engine (OpenCV, lokal gebündelt — nur beim ersten Lauf)…",
     "progress.engineReady": "Ausrichtungs-Engine bereit.",
-    "progress.upscaling": "Bilder werden {factor}× hochskaliert für höhere Auflösungsanalyse…",
+    "progress.analyzingRes": "KI analysiert Bildauflösung…",
+    "progress.upscaling": "Bilder werden {factor}× hochskaliert (KI-empfohlen)…",
     "progress.aligning": "Überlagere Bilder — ORB-Merkmalsabgleich + RANSAC-Homographie…",
     "progress.splitting": "Zerlege die Szene in hochaufgelöste Regionen…",
     "progress.region": "Analysiere Region {done}/{total} mit dem Bildmodell…",
