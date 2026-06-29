@@ -17,27 +17,58 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
 
   const ACCEPTED_EXTS = ["png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp", "gif"];
 
+  const toJpeg = (canvas: HTMLCanvasElement) => canvas.toDataURL("image/jpeg", 0.92);
+
   const handle = (file: File | undefined) => {
     if (!file) return;
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const isTiff = ext === "tif" || ext === "tiff" || file.type === "image/tiff";
+
     if (!file.type.startsWith("image/") && !ACCEPTED_EXTS.includes(ext)) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const raw = reader.result as string;
-      // Normalize any format to JPEG via canvas (handles BMP, TIFF on Safari, etc.)
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext("2d")!.drawImage(img, 0, 0);
-        onFile(canvas.toDataURL("image/jpeg", 0.92));
+    if (isTiff) {
+      // Browsers can't decode TIFF natively — use utif to decode to raw RGBA
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const UTIF = await import("utif");
+          const buffer = reader.result as ArrayBuffer;
+          const ifds = UTIF.decode(buffer);
+          if (!ifds.length) return;
+          UTIF.decodeImage(buffer, ifds[0]);
+          const rgba = UTIF.toRGBA8(ifds[0]);
+          const { width, height } = ifds[0];
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d")!;
+          const imgData = ctx.createImageData(width, height);
+          imgData.data.set(rgba);
+          ctx.putImageData(imgData, 0, 0);
+          onFile(toJpeg(canvas));
+        } catch {
+          // silently ignore unreadable TIFFs
+        }
       };
-      img.onerror = () => onFile(raw); // fallback: pass through as-is
-      img.src = raw;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(file);
+    } else {
+      // All other formats: read as data URL, normalize to JPEG via canvas
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = reader.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext("2d")!.drawImage(img, 0, 0);
+          onFile(toJpeg(canvas));
+        };
+        img.onerror = () => onFile(raw);
+        img.src = raw;
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
