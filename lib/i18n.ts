@@ -46,6 +46,7 @@ export const STRINGS = {
     "upload.laterSub": "e.g. 2025",
     "upload.hint": "Click or drop an image",
     "upload.tip": "Upload an aerial/orthophoto image (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tiffError": "Could not decode this TIFF — the file may use an unsupported encoding (e.g. tiled, 16-bit float, or proprietary GeoTIFF). Try exporting as PNG or JPEG.",
 
     "run.detect": "Detect changes",
     "run.loading": "Loading alignment engine…",
@@ -208,6 +209,7 @@ export const STRINGS = {
     "upload.laterSub": "z. B. 2025",
     "upload.hint": "Bild anklicken oder hineinziehen",
     "upload.tip": "Laden Sie ein Luft-/Orthophoto hoch (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tiffError": "Dieses TIFF konnte nicht dekodiert werden — die Datei verwendet möglicherweise eine nicht unterstützte Kodierung (z. B. Kacheln, 16-Bit-Float oder proprietäres GeoTIFF). Versuchen Sie, als PNG oder JPEG zu exportieren.",
 
     "run.detect": "Veränderungen erkennen",
     "run.loading": "Lade Ausrichtungs-Engine…",
