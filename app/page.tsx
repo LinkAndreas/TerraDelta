@@ -403,6 +403,8 @@ export default function Home() {
             setMinConf={setMinConf}
             query={query}
             setQuery={setQuery}
+            refUrl={align.refUrl}
+            targetUrl={align.targetUrl}
           />
         </>
       )}

@@ -15,10 +15,28 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
 
+  const ACCEPTED_EXTS = ["png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp", "gif"];
+
   const handle = (file: File | undefined) => {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!file.type.startsWith("image/") && !ACCEPTED_EXTS.includes(ext)) return;
+
     const reader = new FileReader();
-    reader.onload = () => onFile(reader.result as string);
+    reader.onload = () => {
+      const raw = reader.result as string;
+      // Normalize any format to JPEG via canvas (handles BMP, TIFF on Safari, etc.)
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d")!.drawImage(img, 0, 0);
+        onFile(canvas.toDataURL("image/jpeg", 0.92));
+      };
+      img.onerror = () => onFile(raw); // fallback: pass through as-is
+      img.src = raw;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -83,7 +101,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif"
         hidden
         onChange={(e) => handle(e.target.files?.[0])}
       />
