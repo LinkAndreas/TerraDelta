@@ -54,7 +54,10 @@ export async function buildTiles(
   opts?: { targetTilePx?: number; overlap?: number; maxTiles?: number; maxTilePx?: number },
 ): Promise<TileSet> {
   const targetTilePx = opts?.targetTilePx ?? 760;
-  const overlap = opts?.overlap ?? 0.15;
+  // Wider overlap so a change landing on a tile seam still sits well inside at
+  // least one neighbouring tile (avoids large/edge changes being split into
+  // slivers that each tile under-reports). dedupe() removes the duplicates.
+  const overlap = opts?.overlap ?? 0.22;
   const maxTiles = opts?.maxTiles ?? 16;
   const maxTilePx = opts?.maxTilePx ?? 1100;
 
