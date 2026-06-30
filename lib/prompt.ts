@@ -11,29 +11,36 @@ You receive two images of the SAME geographic area (a region of an aerial orthop
 
 GOAL: detect real-world semantic changes to the BUILT ENVIRONMENT and LAND USE with both HIGH PRECISION and HIGH RECALL.
 
-METHOD: Work systematically. Mentally divide the image into a grid and compare the two dates cell by cell. For each location ask: "Did a man-made structure or the land use actually, physically change here?"
+METHOD: Use TWO complementary passes.
+1. ZOOM-IN PASS: mentally divide the image into a grid and compare the two dates cell by cell. For each location ask: "Did a man-made structure or the land use actually, physically change here?"
+2. STEP-BACK PASS: then look at the whole frame at once and compare the two dates holistically, scanning for LARGE-AREA land-use conversion that spans many cells — especially at the EDGE OF A SETTLEMENT, where open land becomes built-up. Diffuse area-wide changes are easy to miss cell-by-cell precisely because they are big; do not let their size hide them.
 
 REPORT these (one entry each):
 - Buildings / houses / halls / sheds: newly built, demolished/removed, or visibly modified (footprint extended, new wing, roof replaced or re-structured, rooftop solar panels added).
 - Construction activity: a building site appearing (foundations, excavated bare ground, cranes, staged materials) where there was none.
 - Roads / paths / driveways / parking lots / roundabouts / bridges: added, removed, widened, or newly paved.
-- Durable, human-driven land development: a field or forest converted into a development or quarry; a quarry/gravel pit or pond that was newly dug or clearly expanded; land cleared/graded for construction.
+- Durable, human-driven land development: a field, meadow or forest converted into a development, built-up area, industrial/commercial estate or quarry; a new street grid or row of plots appearing on former open land at a town's edge; a quarry/gravel pit or pond that was newly dug or clearly expanded; land cleared/graded for construction.
+- Urban / settlement expansion: an area that was fields or vegetation in the EARLIER image but shows the geometric texture of development in the LATER image (regular rectangular parcels, straight new roads, rooftops, graded bare earth, hard man-made edges) — even if individual buildings are small. Report the converted area as one entry.
 - New permanent installations: solar farms, swimming pools, large tanks/silos, new walls or fences enclosing a newly developed area.
+
+DISCRIMINATOR — development vs. farming/season. The decisive cue is TEXTURE and GEOMETRY, not color. A patch that merely changed color or tone (green↔brown, lush↔bare) but keeps the SAME smooth, organic, agricultural texture is NOT a change. A patch that gained REGULAR GEOMETRIC STRUCTURE — straight edges, rectangular parcels, road lines, building footprints, uniformly graded earth — IS development, even if it used to be farmland. When a land-cover change shows any such man-made geometric structure, report it (use medium/low confidence if unsure) rather than dismissing it as agriculture.
 
 DO NOT REPORT (these are NOT semantic changes — reporting them is an error):
 - Lighting, sun angle, time of day, or shadow differences.
 - Seasonal vegetation: leaf-on vs leaf-off, green vs brown grass, tree/forest color, growth stage. Forest looking different in color or density is NOT a change.
-- Agricultural cycle: harvested vs unharvested, plowed vs planted, mown vs grown, a different crop. (Only report if the land was PERMANENTLY converted to non-agricultural use.)
+- Agricultural cycle: harvested vs unharvested, plowed vs planted, mown vs grown, a different crop. (Only report if the land was PERMANENTLY converted to non-agricultural use — see the DISCRIMINATOR above.)
 - Cars, vehicles, or other temporary/movable objects.
 - Water surface color, ripples, or reflections.
 - Overall color / brightness / contrast / white-balance differences between captures.
 - Minor residual misalignment (a structure shifted a few pixels but otherwise identical is NOT a change).
 
+NOTE: a change may continue past the edge of this frame (the area is one tile of a larger scene). Still report the visible part — box just what you can see.
+
 OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image.
 
-Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. But never invent changes: if a region differs only in vegetation, season, lighting or agriculture, report nothing there. If nothing genuine changed, return an empty changes array.
+Be thorough — list EVERY genuine structural / infrastructure / land-development change, including both small single houses / short driveways AND large area-wide developments that fill much of the frame. But never invent changes: if a region differs only in vegetation, season, lighting or agriculture, report nothing there. If nothing genuine changed, return an empty changes array.
 
-Always reason region by region first, then output the changes.`;
+Always reason first (zoom-in pass region by region, then step-back pass over the whole frame), then output the changes.`;
 
 // Used by providers that don't have a native structured-output schema (Gemini):
 // describe the exact JSON shape in the prompt.
