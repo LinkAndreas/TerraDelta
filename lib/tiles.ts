@@ -119,6 +119,44 @@ export async function buildTiles(
   return { overview, tiles };
 }
 
+// Zoomed crops around candidate detections for the verification pass: each
+// candidate is re-examined up close with generous context so the model can
+// confirm or reject it. Returned as Tiles so mapToGlobal can bring refined
+// boxes back to global coordinates.
+export async function buildVerifyCrops(
+  refUrl: string,
+  targetUrl: string,
+  boxes: [number, number, number, number][],
+  maxPx = 1400,
+): Promise<Tile[]> {
+  const ref = await imgFromUrl(refUrl);
+  const tgt = await imgFromUrl(targetUrl);
+  const W = ref.naturalWidth;
+  const H = ref.naturalHeight;
+
+  return boxes.map(([x, y, w, h], i) => {
+    // Context margin: 60% of the box per side, floored so tiny detections
+    // still come with enough surroundings to judge them.
+    const mx = Math.max(w * 0.6, 0.08);
+    const my = Math.max(h * 0.6, 0.08);
+    const x0 = Math.max(0, Math.floor((x - mx) * W));
+    const y0 = Math.max(0, Math.floor((y - my) * H));
+    const x1 = Math.min(W, Math.ceil((x + w + mx) * W));
+    const y1 = Math.min(H, Math.ceil((y + h + my) * H));
+    const sw = Math.max(1, x1 - x0);
+    const sh = Math.max(1, y1 - y0);
+    return {
+      refUrl: cropToUrl(ref, x0, y0, sw, sh, maxPx),
+      targetUrl: cropToUrl(tgt, x0, y0, sw, sh, maxPx),
+      gx: x0 / W,
+      gy: y0 / H,
+      gw: sw / W,
+      gh: sh / H,
+      label: `verify-${i + 1}`,
+    };
+  });
+}
+
 const clamp01 = (n: number) => Math.min(Math.max(n, 0), 1);
 
 export function mapToGlobal(

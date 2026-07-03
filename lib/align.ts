@@ -96,10 +96,56 @@ function imgFromUrl(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function matToUrl(cv: any, mat: any): string {
-  const canvas = document.createElement("canvas");
-  cv.imshow(canvas, mat);
-  return canvas.toDataURL("image/jpeg", 0.9);
+// Linear radiometric normalization: shift the target's per-channel color
+// statistics (mean/std) to match the reference, so global brightness and
+// white-balance differences between the two capture dates don't read as
+// changes downstream. Pure-black pixels are excluded — the perspective warp
+// fills off-image corners with exact black, which would skew the statistics.
+function matchColors(refCanvas: HTMLCanvasElement, tgtCanvas: HTMLCanvasElement): void {
+  const stats = (data: Uint8ClampedArray) => {
+    const sum = [0, 0, 0];
+    const sq = [0, 0, 0];
+    let n = 0;
+    // Sample every 4th pixel — plenty for global statistics.
+    for (let i = 0; i < data.length; i += 16) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r === 0 && g === 0 && b === 0) continue;
+      sum[0] += r;
+      sq[0] += r * r;
+      sum[1] += g;
+      sq[1] += g * g;
+      sum[2] += b;
+      sq[2] += b * b;
+      n++;
+    }
+    if (n < 1000) return null;
+    const mean = sum.map((s) => s / n);
+    const std = mean.map((m, ch) => Math.sqrt(Math.max(1, sq[ch] / n - m * m)));
+    return { mean, std };
+  };
+
+  const rctx = refCanvas.getContext("2d")!;
+  const tctx = tgtCanvas.getContext("2d")!;
+  const refStats = stats(rctx.getImageData(0, 0, refCanvas.width, refCanvas.height).data);
+  const tgtImage = tctx.getImageData(0, 0, tgtCanvas.width, tgtCanvas.height);
+  const tgtStats = stats(tgtImage.data);
+  if (!refStats || !tgtStats) return;
+
+  // Clamp the contrast gain so a scene-content difference can't cause an
+  // extreme stretch — we only want to remove capture-level tint/brightness.
+  const gain = [0, 1, 2].map((ch) =>
+    Math.min(1.6, Math.max(0.6, refStats.std[ch] / tgtStats.std[ch])),
+  );
+  const d = tgtImage.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0) continue; // keep warp border black
+    for (let ch = 0; ch < 3; ch++) {
+      d[i + ch] = (d[i + ch] - tgtStats.mean[ch]) * gain[ch] + refStats.mean[ch];
+    }
+  }
+  tctx.putImageData(tgtImage, 0, 0);
 }
 
 export async function alignImages(
@@ -210,7 +256,10 @@ export async function alignImages(
       new cv.Scalar(),
     );
 
-    const targetUrlOut = matToUrl(cv, warped);
+    const outCanvas = document.createElement("canvas");
+    cv.imshow(outCanvas, warped);
+    matchColors(refCanvas, outCanvas);
+    const targetUrlOut = outCanvas.toDataURL("image/jpeg", 0.9);
     return { refUrl, targetUrl: targetUrlOut, width: W, height: H, aligned: true, matchCount };
   } catch {
     // Fallback: no homography — just resize the target to the working frame.
@@ -218,6 +267,7 @@ export async function alignImages(
     tCanvas.width = W;
     tCanvas.height = H;
     tCanvas.getContext("2d")!.drawImage(targetImg, 0, 0, W, H);
+    matchColors(refCanvas, tCanvas);
     return {
       refUrl,
       targetUrl: tCanvas.toDataURL("image/jpeg", 0.9),

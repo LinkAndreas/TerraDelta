@@ -1,7 +1,14 @@
 // Shared prompt + parsing helpers used by every provider, so Anthropic and
 // Gemini analyze identically and return the same structure.
 
-import { CATEGORIES, type AnalyzeResult, type Change, type ChangeType, type Confidence } from "./types";
+import {
+  CATEGORIES,
+  type AnalyzeResult,
+  type Change,
+  type ChangeType,
+  type Confidence,
+  type VerifyResult,
+} from "./types";
 
 export const SYSTEM = `You are a meticulous remote-sensing change-detection analyst.
 
@@ -37,6 +44,38 @@ OUTPUT per change: category, change_type (added/removed/modified), a concise des
 Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is a genuine change, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes where only vegetation, season, lighting, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
 Always reason region by region first, then output the changes.`;
+
+// Second-pass verifier: judges ONE candidate change on a zoomed-in crop.
+// The detector pass is tuned for recall; this pass restores precision.
+export const VERIFY_SYSTEM = `You are a strict remote-sensing change-detection verifier.
+
+You receive two zoomed-in crops of the SAME location from a co-registered aerial orthophoto pair:
+- Image 1 = the EARLIER date.
+- Image 2 = the LATER date.
+plus ONE candidate change that a first-pass detector claims to see here.
+
+Your job: decide whether the claimed change is GENUINE — a real physical change to the built environment or land use (a building/road/bridge/plot/water feature added, removed, or modified).
+
+Judge strictly. REJECT the candidate if the difference is only:
+- lighting, sun angle, or shadows;
+- seasonal vegetation (leaf-on/off, color, growth) or the agricultural cycle (plowed/harvested/mown/different crop);
+- cars or other movable objects;
+- water color or reflections;
+- global color/brightness/white-balance differences;
+- slight misalignment of an otherwise identical structure.
+
+But CONFIRM bare graded earth WITH development cues (new access roads or curbs, parcel layout, foundations, utility trenches, building shells, cranes, staged material piles) — that is genuine land development, even at an early stage.
+
+Return:
+- genuine: true or false
+- confidence: certainty about the change if genuine (high = unmistakable, medium = likely, low = possible); use "low" if rejecting
+- bbox: if genuine, a TIGHT normalized [x, y, width, height] box around the changed object in THIS crop (origin top-left); otherwise [0, 0, 0, 0]
+- reason: one short sentence explaining the verdict.`;
+
+export function verifyLanguageInstruction(lang?: string): string {
+  if (lang === "de") return ' Write the "reason" in German (Deutsch).';
+  return "";
+}
 
 // Used by providers that don't have a native structured-output schema (Gemini):
 // describe the exact JSON shape in the prompt.
@@ -102,4 +141,20 @@ export function buildResult(
     bbox: clampBox(c.bbox),
   }));
   return { changes, summary: parsed.summary ?? "", model };
+}
+
+export function buildVerifyResult(parsed: {
+  genuine?: unknown;
+  confidence?: unknown;
+  bbox?: unknown;
+  reason?: unknown;
+}): VerifyResult {
+  return {
+    genuine: parsed.genuine === true,
+    confidence: CONFS.includes(parsed.confidence as Confidence)
+      ? (parsed.confidence as Confidence)
+      : "medium",
+    bbox: clampBox(parsed.bbox),
+    reason: String(parsed.reason ?? ""),
+  };
 }

@@ -8,7 +8,7 @@ import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
 import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
@@ -222,13 +222,71 @@ export default function Home() {
 
       setProgressMsg(t("progress.merging"));
       const merged = dedupe(results.flatMap((r) => r.changes));
+
+      // Second pass: re-examine every candidate on a zoomed-in crop so false
+      // positives (lighting/season artifacts) are dropped and boxes tightened.
+      // The detection pass is tuned for recall; this pass restores precision.
+      let confirmed = merged;
+      if (merged.length > 0) {
+        setProgressMsg(t("progress.verifying", { done: 0, total: merged.length }));
+        const crops = await buildVerifyCrops(
+          aligned.refUrl,
+          aligned.targetUrl,
+          merged.map((c) => c.bbox),
+        );
+        let vDone = 0;
+        const verified = await runPool<Change, Change | null>(
+          merged,
+          4,
+          async (chg, i) => {
+            try {
+              const res = await fetch("/api/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  reference: crops[i].refUrl,
+                  target: crops[i].targetUrl,
+                  provider,
+                  model,
+                  apiKey: keys[provider] || undefined,
+                  lang,
+                  candidate: {
+                    category: chg.category,
+                    change_type: chg.change_type,
+                    description: chg.description,
+                  },
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "Verification failed");
+              if (!data.genuine) return null;
+              const refined = mapToGlobal(crops[i], data.bbox ?? [0, 0, 0, 0]);
+              return {
+                ...chg,
+                confidence: (data.confidence as Confidence) || chg.confidence,
+                bbox: refined[2] > 0.001 && refined[3] > 0.001 ? refined : chg.bbox,
+              };
+            } catch {
+              return chg; // verification unavailable — keep the original detection
+            }
+          },
+          () => {
+            vDone++;
+            setProgressMsg(t("progress.verifying", { done: vDone, total: merged.length }));
+          },
+        );
+        confirmed = verified
+          .filter((c): c is Change => c !== null)
+          .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
+      }
+
       const failed = results.filter((r) => r.failed).length;
       const summary =
         results[0]?.summary ||
-        `${merged.length} change${merged.length === 1 ? "" : "s"} detected across ${tasks.length} regions.`;
+        `${confirmed.length} change${confirmed.length === 1 ? "" : "s"} detected across ${tasks.length} regions.`;
       const usedModel = results.map((r) => r.model).find(Boolean) || "";
 
-      setResult({ changes: merged, summary, model: usedModel });
+      setResult({ changes: confirmed, summary, model: usedModel });
       if (failed > 0) {
         const firstErr = results.find((r) => r.failed)?.error || "unknown error";
         const allFailed = failed === tasks.length;

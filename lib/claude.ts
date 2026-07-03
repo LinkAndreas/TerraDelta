@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORIES, type AnalyzeResult, type SupportedModels } from "./types";
-import { SYSTEM, buildResult, dataUrlParts, languageInstruction, stripFences } from "./prompt";
+import { CATEGORIES, type AnalyzeResult, type SupportedModels, type VerifyResult } from "./types";
+import {
+  SYSTEM,
+  VERIFY_SYSTEM,
+  buildResult,
+  buildVerifyResult,
+  dataUrlParts,
+  languageInstruction,
+  verifyLanguageInstruction,
+  stripFences,
+} from "./prompt";
 
 const SCHEMA = {
   type: "object",
@@ -81,6 +90,81 @@ export async function anthropicDetect(
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
   return buildResult(parsed, opts.model);
+}
+
+const VERIFY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    genuine: { type: "boolean" },
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    bbox: { type: "array", items: { type: "number" } },
+    reason: { type: "string" },
+  },
+  required: ["genuine", "confidence", "bbox", "reason"],
+};
+
+export async function anthropicVerify(
+  referenceDataUrl: string,
+  targetDataUrl: string,
+  opts: {
+    model: string;
+    apiKey?: string;
+    language?: string;
+    candidate: { category: string; change_type: string; description: string };
+  },
+): Promise<VerifyResult> {
+  const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "No Anthropic API key. Add one in the provider settings, or set ANTHROPIC_API_KEY.",
+    );
+  }
+
+  const client = new Anthropic({ apiKey });
+  const ref = dataUrlParts(referenceDataUrl);
+  const tgt = dataUrlParts(targetDataUrl);
+  const c = opts.candidate;
+
+  const params = {
+    model: opts.model,
+    max_tokens: 1500,
+    system: VERIFY_SYSTEM,
+    output_config: { format: { type: "json_schema", schema: VERIFY_SCHEMA } },
+    messages: [
+      {
+        role: "user" as const,
+        content: [
+          { type: "text" as const, text: "Image 1 — EARLIER capture (zoomed crop):" },
+          { type: "image" as const, source: { type: "base64" as const, media_type: ref.mediaType, data: ref.data } },
+          { type: "text" as const, text: "Image 2 — LATER capture (same crop):" },
+          { type: "image" as const, source: { type: "base64" as const, media_type: tgt.mediaType, data: tgt.data } },
+          {
+            type: "text" as const,
+            text:
+              `Candidate change to verify: category "${c.category}", ${c.change_type} — ${c.description}\n` +
+              "Decide whether this is a genuine semantic change and return the JSON." +
+              verifyLanguageInstruction(opts.language),
+          },
+        ],
+      },
+    ],
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await client.messages.create(params as any);
+  const textBlock = response.content.find((b: { type: string }) => b.type === "text") as
+    | { text?: string }
+    | undefined;
+  const raw = (textBlock?.text ?? "").trim();
+
+  let parsed: Parameters<typeof buildVerifyResult>[0];
+  try {
+    parsed = JSON.parse(stripFences(raw));
+  } catch {
+    throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
+  }
+  return buildVerifyResult(parsed);
 }
 
 export async function fetchModels(
