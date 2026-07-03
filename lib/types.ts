@@ -33,6 +33,16 @@ export interface AnalyzeResult {
   model: string;
 }
 
+// Result of the second-pass verification of a single candidate change,
+// judged on a zoomed-in crop around the detection.
+export interface VerifyResult {
+  genuine: boolean;
+  confidence: Confidence;
+  // Refined tight box in the CROP's normalized coordinates ([0,0,0,0] if rejected).
+  bbox: [number, number, number, number];
+  reason: string;
+}
+
 export type SupportedModels = { id: string; name: string }[];
 
 export const CHANGE_COLORS: Record<ChangeType, string> = {

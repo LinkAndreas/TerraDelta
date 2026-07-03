@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectChanges } from "@/lib/detect";
+import { detectChanges, verifyDetectedChange } from "@/lib/detect";
 import { PROVIDERS, type Provider } from "@/lib/models";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, candidate } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -33,14 +33,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await detectChanges({
+    const common = {
       provider: prov,
       model: typeof model === "string" ? model : "default",
       apiKey: cleanKey,
       language: typeof lang === "string" ? lang : undefined,
       reference,
       target,
-    });
+    };
+
+    // With a candidate, this is a second-pass verification of one detection
+    // on a zoomed crop; without one, a regular detection pass.
+    if (candidate && typeof candidate === "object") {
+      const result = await verifyDetectedChange({
+        ...common,
+        candidate: {
+          category: String(candidate.category ?? "other"),
+          change_type: String(candidate.change_type ?? "modified"),
+          description: String(candidate.description ?? ""),
+        },
+      });
+      return NextResponse.json(result);
+    }
+
+    const result = await detectChanges(common);
     return NextResponse.json(result);
   } catch (err) {
     let message = err instanceof Error ? err.message : "Unknown error";

@@ -65,6 +65,7 @@ export const STRINGS = {
     "progress.splitting": "Splitting the scene into high-resolution regions…",
     "progress.region": "Analyzing region {done}/{total} with the vision model…",
     "progress.merging": "Merging overlapping regions and de-duplicating…",
+    "progress.verifying": "Verifying candidate {done}/{total} at high zoom…",
 
     "align.matched": "Aligned via feature matching ({n} matches)",
     "align.fallback": "Alignment fell back to resize — results may be noisier",
@@ -149,7 +150,7 @@ export const STRINGS = {
     "how.1": "Both images are co-registered in-browser using ORB feature matching + a RANSAC homography.",
     "how.2": "The aligned pair is split into overlapping high-resolution tiles plus one overview pass.",
     "how.3": "Each region is analyzed by a vision model that reasons about genuine structural / land-use changes (ignoring season, lighting and shadows).",
-    "how.4": "Detections are mapped back to global coordinates, de-duplicated, highlighted and listed.",
+    "how.4": "Detections are mapped back to global coordinates, de-duplicated, re-verified on zoomed-in crops, highlighted and listed.",
 
     "onboard.heading": "Getting started",
     "onboard.subtitle": "Follow these steps to compare two orthophotos.",
@@ -228,6 +229,7 @@ export const STRINGS = {
     "progress.splitting": "Zerlege die Szene in hochaufgelöste Regionen…",
     "progress.region": "Analysiere Region {done}/{total} mit dem Bildmodell…",
     "progress.merging": "Führe überlappende Regionen zusammen und entferne Duplikate…",
+    "progress.verifying": "Überprüfe Kandidat {done}/{total} in hoher Vergrößerung…",
 
     "align.matched": "Ausgerichtet per Merkmalsabgleich ({n} Treffer)",
     "align.fallback": "Ausrichtung auf einfache Skalierung zurückgefallen — Ergebnisse evtl. ungenauer",
@@ -312,7 +314,7 @@ export const STRINGS = {
     "how.1": "Beide Bilder werden im Browser per ORB-Merkmalsabgleich + RANSAC-Homographie überlagert.",
     "how.2": "Das ausgerichtete Paar wird in überlappende, hochaufgelöste Kacheln plus einen Überblick zerlegt.",
     "how.3": "Jede Region wird von einem Bildmodell analysiert, das echte bauliche / Nutzungs-Veränderungen erkennt (Jahreszeit, Licht und Schatten werden ignoriert).",
-    "how.4": "Treffer werden auf globale Koordinaten zurückgerechnet, dedupliziert, hervorgehoben und aufgelistet.",
+    "how.4": "Treffer werden auf globale Koordinaten zurückgerechnet, dedupliziert, in hoher Vergrößerung nachgeprüft, hervorgehoben und aufgelistet.",
 
     "onboard.heading": "Erste Schritte",
     "onboard.subtitle": "Folgen Sie diesen Schritten, um zwei Orthophotos zu vergleichen.",
