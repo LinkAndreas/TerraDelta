@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const result = await detectChanges({
       provider: prov,
-      model: typeof model === "string" ? model : PROVIDERS[prov].defaultModel,
+      model: typeof model === "string" ? model : "default",
       apiKey: cleanKey,
       language: typeof lang === "string" ? lang : undefined,
       reference,
