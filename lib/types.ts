@@ -33,6 +33,8 @@ export interface AnalyzeResult {
   model: string;
 }
 
+export type SupportedModels = { id: string; name: string }[];
+
 export const CHANGE_COLORS: Record<ChangeType, string> = {
   added: "#22c55e", // green
   removed: "#ef4444", // red

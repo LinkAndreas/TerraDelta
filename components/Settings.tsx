@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n } from "@/lib/i18n";
+import { SupportedModels } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -13,6 +14,9 @@ interface Props {
   setModel: (m: string) => void;
   keys: Record<Provider, string>;
   setKey: (p: Provider, value: string) => void;
+  availableModels: Record<Provider, SupportedModels | undefined>;
+  onRefreshModels: () => void;
+  isFetchingModels: boolean;
 }
 
 export default function Settings({
@@ -24,6 +28,9 @@ export default function Settings({
   setModel,
   keys,
   setKey,
+  availableModels,
+  onRefreshModels,
+  isFetchingModels,
 }: Props) {
   const { t } = useI18n();
 
@@ -54,11 +61,25 @@ export default function Settings({
 
         <div className="modal-body">
           <div title={t("settings.tipModel")}>
-            <div className="field-label">{t("settings.model")}</div>
+            <div className="field-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{t("settings.model")}</span>
+              <button 
+                className="icon-btn" 
+                onClick={onRefreshModels} 
+                title="Refresh Models" 
+                disabled={isFetchingModels}
+                style={{ fontSize: 14, opacity: isFetchingModels ? 0.5 : 1 }}
+              >
+                {isFetchingModels ? "..." : "↻"}
+              </button>
+            </div>
             <select value={model} onChange={(e) => setModel(e.target.value)} className="field-select">
-              {meta.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
+              <option key={"default"} value={"default"}>
+                default
+              </option>
+              {availableModels[provider]?.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
                 </option>
               ))}
             </select>

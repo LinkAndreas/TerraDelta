@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORIES, type AnalyzeResult } from "./types";
+import { CATEGORIES, type AnalyzeResult, type SupportedModels } from "./types";
 import { SYSTEM, buildResult, dataUrlParts, languageInstruction, stripFences } from "./prompt";
 
 const SCHEMA = {
@@ -81,4 +81,22 @@ export async function anthropicDetect(
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
   return buildResult(parsed, opts.model);
+}
+
+export async function fetchModels(
+  opts: { apiKey?: string; }
+): Promise<SupportedModels> {
+  const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "No Anthropic API key. Add one in the provider settings, or set ANTHROPIC_API_KEY.",
+    );
+  }
+
+  const client = new Anthropic({ apiKey });
+  const response = await client.models.list();
+  return response.data.map((model) => ({
+    id: model.id,
+    name: model.display_name || model.id,
+  }));
 }

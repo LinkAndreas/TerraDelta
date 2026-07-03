@@ -14,8 +14,7 @@ export interface DetectRequest {
 export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
-  const model = meta.models.includes(req.model) ? req.model : meta.defaultModel;
-  const o = { model, apiKey: req.apiKey, language: req.language };
+  const o = { model: req.model, apiKey: req.apiKey, language: req.language };
 
   return anthropicDetect(req.reference, req.target, o);
 }

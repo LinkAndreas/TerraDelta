@@ -9,10 +9,10 @@ import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
-import { PROVIDERS, type Provider } from "@/lib/models";
+import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
-import type { AnalyzeResult, Change, ChangeType, Confidence } from "@/lib/types";
+import type { AnalyzeResult, Change, ChangeType, Confidence, SupportedModels } from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
 
@@ -61,11 +61,42 @@ export default function Home() {
 
   // Provider / model / API keys (persisted to localStorage).
   const [provider, setProvider] = useState<Provider>("anthropic");
-  const [model, setModel] = useState<string>(PROVIDERS.anthropic.defaultModel);
+  const [model, setModel] = useState<string>("default");
   const [keys, setKeys] = useState<Record<Provider, string>>({ anthropic: "" });
   const [loaded, setLoaded] = useState(false);
+  const [availableModels, setAvailableModels] = useState<Record<Provider, SupportedModels | undefined>>({ anthropic: undefined });
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const refreshModels = async () => {
+    setIsFetchingModels(true);
+    const newAvailableModels: Record<Provider, SupportedModels | undefined> = { anthropic: undefined };
+    for (const p of PROVIDER_KEYS) {
+      newAvailableModels[p] = await PROVIDERS[p].fetchModels(keys[p]);
+    }
+    setAvailableModels(newAvailableModels);
+    setIsFetchingModels(false);
+  };
+
+  useEffect(() => {
+    let active = true;
+    const timeout = setTimeout(async () => {
+      setIsFetchingModels(true);
+      const newAvailableModels: Record<Provider, SupportedModels | undefined> = { anthropic: undefined };
+      for (const p of PROVIDER_KEYS) {
+        newAvailableModels[p] = await PROVIDERS[p].fetchModels(keys[p]);
+      }
+      if (active) {
+        setAvailableModels(newAvailableModels);
+        setIsFetchingModels(false);
+      }
+    }, 500);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [keys]);
 
   useEffect(() => {
     setShowGuide(localStorage.getItem("orthophoto-diff:onboarded") !== "1");
@@ -441,6 +472,9 @@ export default function Home() {
         setModel={setModel}
         keys={keys}
         setKey={(p, value) => setKeys((k) => ({ ...k, [p]: value }))}
+        availableModels={availableModels}
+        onRefreshModels={refreshModels}
+        isFetchingModels={isFetchingModels}
       />
     </div>
   );
