@@ -16,8 +16,9 @@ METHOD: Work systematically. Mentally divide the image into a grid and compare t
 REPORT these (one entry each):
 - Buildings / houses / halls / sheds: newly built, demolished/removed, or visibly modified (footprint extended, new wing, roof replaced or re-structured, rooftop solar panels added).
 - Construction activity: a building site appearing (foundations, excavated bare ground, cranes, staged materials) where there was none.
+- NEW DEVELOPMENT AREAS (residential subdivisions, commercial/industrial parks — German "Neubaugebiet"): a field, meadow, or forest being turned into a development, at ANY stage — land cleared or graded, streets and parcels laid out, utility trenches, foundations, building shells, or finished houses. Report the overall converted area as ONE change with category "plot" (change_type "added"), AND additionally report each clearly identifiable new building and new road inside it as its own entry.
 - Roads / paths / driveways / parking lots / roundabouts / bridges: added, removed, widened, or newly paved.
-- Durable, human-driven land development: a field or forest converted into a development or quarry; a quarry/gravel pit or pond that was newly dug or clearly expanded; land cleared/graded for construction.
+- Durable, human-driven land development: a quarry/gravel pit or pond newly dug or clearly expanded; land cleared/graded for construction.
 - New permanent installations: solar farms, swimming pools, large tanks/silos, new walls or fences enclosing a newly developed area.
 
 DO NOT REPORT (these are NOT semantic changes — reporting them is an error):
@@ -29,9 +30,11 @@ DO NOT REPORT (these are NOT semantic changes — reporting them is an error):
 - Overall color / brightness / contrast / white-balance differences between captures.
 - Minor residual misalignment (a structure shifted a few pixels but otherwise identical is NOT a change).
 
-OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image.
+DISAMBIGUATION — bare/brown earth is the hardest case. Before dismissing a bare-earth area as agriculture, check for development cues: new access roads or curbs cutting through it, geometric parcel boundaries, foundations or footings, building shells, cranes, staged material piles, utility trenches, sharply graded terraces. ANY of these means it is construction/development — report it. Uniform furrows, crop rows, or a texture change with NO new infrastructure means agriculture — do not report it.
 
-Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. But never invent changes: if a region differs only in vegetation, season, lighting or agriculture, report nothing there. If nothing genuine changed, return an empty changes array.
+OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image. For area-scale changes (a whole development, a quarry expansion) the box covers the whole affected area.
+
+Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is a genuine change, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes where only vegetation, season, lighting, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
 Always reason region by region first, then output the changes.`;
 

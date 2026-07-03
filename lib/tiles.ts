@@ -56,7 +56,7 @@ export async function buildTiles(
   const targetTilePx = opts?.targetTilePx ?? 760;
   const overlap = opts?.overlap ?? 0.15;
   const maxTiles = opts?.maxTiles ?? 16;
-  const maxTilePx = opts?.maxTilePx ?? 1100;
+  const maxTilePx = opts?.maxTilePx ?? 1400;
 
   const ref = await imgFromUrl(refUrl);
   const tgt = await imgFromUrl(targetUrl);
@@ -64,8 +64,8 @@ export async function buildTiles(
   const H = ref.naturalHeight;
 
   const overview: Tile = {
-    refUrl: cropToUrl(ref, 0, 0, W, H, 1500),
-    targetUrl: cropToUrl(tgt, 0, 0, W, H, 1500),
+    refUrl: cropToUrl(ref, 0, 0, W, H, 1560),
+    targetUrl: cropToUrl(tgt, 0, 0, W, H, 1560),
     gx: 0,
     gy: 0,
     gw: 1,
@@ -81,31 +81,40 @@ export async function buildTiles(
     else break;
   }
 
-  const baseW = W / cols;
-  const baseH = H / rows;
-  const ovx = baseW * overlap;
-  const ovy = baseH * overlap;
-
   const tiles: Tile[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x0 = Math.max(0, Math.floor(c * baseW - ovx));
-      const y0 = Math.max(0, Math.floor(r * baseH - ovy));
-      const x1 = Math.min(W, Math.ceil((c + 1) * baseW + ovx));
-      const y1 = Math.min(H, Math.ceil((r + 1) * baseH + ovy));
-      const sw = x1 - x0;
-      const sh = y1 - y0;
-      tiles.push({
-        refUrl: cropToUrl(ref, x0, y0, sw, sh, maxTilePx),
-        targetUrl: cropToUrl(tgt, x0, y0, sw, sh, maxTilePx),
-        gx: x0 / W,
-        gy: y0 / H,
-        gw: sw / W,
-        gh: sh / H,
-        label: `r${r + 1}c${c + 1}`,
-      });
+
+  const addGrid = (gcols: number, grows: number, prefix: string) => {
+    const baseW = W / gcols;
+    const baseH = H / grows;
+    const ovx = baseW * overlap;
+    const ovy = baseH * overlap;
+    for (let r = 0; r < grows; r++) {
+      for (let c = 0; c < gcols; c++) {
+        const x0 = Math.max(0, Math.floor(c * baseW - ovx));
+        const y0 = Math.max(0, Math.floor(r * baseH - ovy));
+        const x1 = Math.min(W, Math.ceil((c + 1) * baseW + ovx));
+        const y1 = Math.min(H, Math.ceil((r + 1) * baseH + ovy));
+        const sw = x1 - x0;
+        const sh = y1 - y0;
+        tiles.push({
+          refUrl: cropToUrl(ref, x0, y0, sw, sh, maxTilePx),
+          targetUrl: cropToUrl(tgt, x0, y0, sw, sh, maxTilePx),
+          gx: x0 / W,
+          gy: y0 / H,
+          gw: sw / W,
+          gh: sh / H,
+          label: `${prefix}r${r + 1}c${c + 1}`,
+        });
+      }
     }
-  }
+  };
+
+  addGrid(cols, rows, "");
+
+  // Mid-zoom layer: area-scale changes (new development areas, quarry
+  // expansions) span many fine tiles, where each tile sees only an ambiguous
+  // fragment. A 2x2 quadrant pass shows such areas whole at readable detail.
+  if (cols * rows > 4) addGrid(2, 2, "q-");
 
   return { overview, tiles };
 }
@@ -143,9 +152,30 @@ function iou(
   return union <= 0 ? 0 : inter / union;
 }
 
+// Fraction of the smaller box covered by the intersection — catches the same
+// change detected at different scales (e.g. overview vs fine tile), where IoU
+// stays low because the box sizes differ a lot.
+function containment(
+  a: [number, number, number, number],
+  b: [number, number, number, number],
+): number {
+  const ix = Math.max(
+    0,
+    Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]),
+  );
+  const iy = Math.max(
+    0,
+    Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]),
+  );
+  const minArea = Math.min(area(a), area(b));
+  return minArea <= 0 ? 0 : (ix * iy) / minArea;
+}
+
 // Merge detections from overlapping tiles: drop near-duplicate boxes of the
-// same change type, keeping the higher-confidence / larger one. Returns a clean
-// list sorted top-left -> bottom-right with fresh sequential ids.
+// same change type, keeping the higher-confidence / larger one. Same-category
+// boxes are also deduped by containment, so a change re-detected at a coarser
+// zoom doesn't appear twice — while distinct objects inside an area-scale
+// change (houses within a new "plot") survive because their category differs.
 export function dedupe(changes: Change[]): Change[] {
   const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
   const sorted = [...changes].sort(
@@ -156,7 +186,10 @@ export function dedupe(changes: Change[]): Change[] {
   const kept: Change[] = [];
   for (const c of sorted) {
     const dup = kept.some(
-      (k) => k.change_type === c.change_type && iou(k.bbox, c.bbox) > 0.4,
+      (k) =>
+        k.change_type === c.change_type &&
+        (iou(k.bbox, c.bbox) > 0.4 ||
+          (k.category === c.category && containment(k.bbox, c.bbox) > 0.75)),
     );
     if (!dup) kept.push(c);
   }
