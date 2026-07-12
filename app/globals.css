@@ -472,6 +472,161 @@ select.lang {
   color: var(--on-accent);
 }
 
+/* Chip checkbox (category selection) — checked/unchecked state is carried by
+   background + border color, not just the native checkbox rendering, so it
+   stays clearly legible even when disabled (locked presets). */
+.chip-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip-checkbox input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.chip-checkbox input:disabled {
+  cursor: not-allowed;
+}
+
+.chip-checkbox[data-checked="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.chip-checkbox[data-disabled="true"] {
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.chip-checkbox[data-disabled="true"]:not([data-checked="true"]) {
+  opacity: 0.5;
+}
+
+.chip-checkbox-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 4px;
+  border: 1.5px solid var(--muted);
+  color: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.chip-checkbox[data-checked="true"] .chip-checkbox-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Search-area map resize handle: a small precise marker with a generous
+   invisible hit target (the wrapper) so it's easy to grab without looking
+   bulky. Rendered as plain HTML (not SVG) so it stays a true circle
+   regardless of the underlying image's aspect ratio. */
+.map-handle-hit {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.map-handle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease;
+  pointer-events: none;
+}
+
+.map-handle-hit:hover .map-handle-dot,
+.map-handle-hit:active .map-handle-dot {
+  transform: scale(1.35);
+}
+
+/* Toggle switch */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 40px;
+  height: 23px;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switch input:disabled {
+  cursor: not-allowed;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 18px;
+  height: 18px;
+  background: var(--card);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(17px);
+}
+
+.switch input:disabled + .switch-track {
+  opacity: 0.45;
+}
+
 /* Spinner (inside the button) */
 .spinner {
   display: inline-block;

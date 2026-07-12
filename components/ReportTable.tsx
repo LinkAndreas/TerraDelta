@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CHANGE_COLORS, confLabel, type Change, type ChangeType, type Confidence } from "@/lib/types";
+import { CHANGE_COLORS, confLabel, type Change, type ChangeType, type Confidence, type GeoRef, type SearchArea } from "@/lib/types";
 import { useI18n, type StringKey } from "@/lib/i18n";
 
 interface Props {
@@ -17,6 +17,10 @@ interface Props {
   setQuery: (q: string) => void;
   refUrl?: string;
   targetUrl?: string;
+  refGeo?: GeoRef | null;
+  // Present only in restricted-search-area mode (§5.1) — enables the
+  // "digitales Merkblatt" export (§6).
+  merkblattArea?: SearchArea | null;
 }
 
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
@@ -34,6 +38,8 @@ export default function ReportTable({
   setQuery,
   refUrl,
   targetUrl,
+  refGeo,
+  merkblattArea,
 }: Props) {
   const { t, lang } = useI18n();
   const [exporting, setExporting] = useState(false);
@@ -43,6 +49,7 @@ export default function ReportTable({
   const rows = changes
     .map((c, i) => ({ c, n: i + 1 }))
     .filter(({ c }) => visibleIds.has(c.id));
+  const visibleChanges = rows.map(({ c }) => c);
 
   async function handleExportPdf() {
     if (!refUrl || !targetUrl || exporting) return;
@@ -50,6 +57,29 @@ export default function ReportTable({
     try {
       const { exportPdf } = await import("@/lib/pdf");
       await exportPdf({ refUrl, targetUrl, changes, lang });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleExportCsv() {
+    if (!refGeo) return;
+    const { exportCsv } = await import("@/lib/exportData");
+    exportCsv(visibleChanges, refGeo);
+  }
+
+  async function handleExportGeoJson() {
+    if (!refGeo) return;
+    const { exportGeoJson } = await import("@/lib/exportData");
+    exportGeoJson(visibleChanges, refGeo);
+  }
+
+  async function handleExportMerkblatt() {
+    if (!refUrl || !targetUrl || !refGeo || !merkblattArea || exporting) return;
+    setExporting(true);
+    try {
+      const { exportMerkblatt } = await import("@/lib/pdf");
+      await exportMerkblatt({ refUrl, targetUrl, changes: visibleChanges, lang, searchArea: merkblattArea, geo: refGeo });
     } finally {
       setExporting(false);
     }
@@ -69,15 +99,43 @@ export default function ReportTable({
             ? t("report.headingOf", { n: rows.length, total: changes.length })
             : t("report.heading", { n: changes.length })}
         </strong>
-        <button
-          className="btn-secondary"
-          onClick={handleExportPdf}
-          disabled={!refUrl || !targetUrl || exporting}
-          title={t("report.tipExport")}
-        >
-          {exporting ? <><span className="spinner" /> Generating…</> : t("report.export")}
-        </button>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button
+            className="btn-secondary"
+            onClick={handleExportPdf}
+            disabled={!refUrl || !targetUrl || exporting}
+            title={t("report.tipExport")}
+          >
+            {exporting ? <><span className="spinner" /> Generating…</> : t("report.export")}
+          </button>
+          {refGeo && (
+            <button className="btn-secondary" onClick={handleExportCsv} title={t("report.tipExportCsv")}>
+              {t("report.exportCsv")}
+            </button>
+          )}
+          {refGeo && (
+            <button className="btn-secondary" onClick={handleExportGeoJson} title={t("report.tipExportGeoJson")}>
+              {t("report.exportGeoJson")}
+            </button>
+          )}
+          {merkblattArea && refGeo && (
+            <button
+              className="btn-secondary"
+              onClick={handleExportMerkblatt}
+              disabled={exporting}
+              title={t("report.tipExportMerkblatt")}
+            >
+              {t("report.exportMerkblatt")}
+            </button>
+          )}
+        </div>
       </div>
+
+      {!refGeo && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 14 }}>
+          {t("report.needsGeoTiffForExport")}
+        </div>
+      )}
 
       <div className="row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         {TYPES.map((tp) => (

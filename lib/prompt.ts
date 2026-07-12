@@ -25,6 +25,7 @@ REPORT these (one entry each):
 - Construction activity: a building site appearing (foundations, excavated bare ground, cranes, staged materials) where there was none.
 - NEW DEVELOPMENT AREAS (residential subdivisions, commercial/industrial parks — German "Neubaugebiet"): a field, meadow, or forest being turned into a development, at ANY stage — land cleared or graded, streets and parcels laid out, utility trenches, foundations, building shells, or finished houses. Report the overall converted area as ONE change with category "plot" (change_type "added"), AND additionally report each clearly identifiable new building and new road inside it as its own entry.
 - Roads / paths / driveways / parking lots / roundabouts / bridges: added, removed, widened, or newly paved.
+- Railway lines / tracks / sidings / platforms: added, removed, or realigned (category "railway").
 - Durable, human-driven land development: a quarry/gravel pit or pond newly dug or clearly expanded; land cleared/graded for construction.
 - New permanent installations: solar farms, swimming pools, large tanks/silos, new walls or fences enclosing a newly developed area.
 
@@ -54,7 +55,7 @@ You receive two zoomed-in crops of the SAME location from a co-registered aerial
 - Image 2 = the LATER date.
 plus ONE candidate change that a first-pass detector claims to see here.
 
-Your job: decide whether the claimed change is GENUINE — a real physical change to the built environment or land use (a building/road/bridge/plot/water feature added, removed, or modified).
+Your job: decide whether the claimed change is GENUINE — a real physical change to the built environment or land use (a building/road/bridge/railway/plot/water feature added, removed, or modified).
 
 Judge strictly. REJECT the candidate if the difference is only:
 - lighting, sun angle, or shadows;

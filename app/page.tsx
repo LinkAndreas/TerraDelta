@@ -1,18 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import UploadZone from "@/components/UploadZone";
+import UploadZone, { type UploadMeta } from "@/components/UploadZone";
 import CompareView from "@/components/CompareView";
 import ReportTable from "@/components/ReportTable";
+import SearchAreaSection from "@/components/SearchAreaSection";
+import CategorySection from "@/components/CategorySection";
 import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
+import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
 import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
-import type { AnalyzeResult, Change, ChangeType, Confidence, SupportedModels } from "@/lib/types";
+import {
+  CATEGORIES,
+  categoriesForPreset,
+  type AnalyzeResult,
+  type Category,
+  type CategoryPreset,
+  type Change,
+  type ChangeType,
+  type Confidence,
+  type SearchArea,
+  type SupportedModels,
+} from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
 
@@ -41,6 +55,25 @@ export default function Home() {
 
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const [targetUrl, setTargetUrl] = useState<string | null>(null);
+  const [refMeta, setRefMeta] = useState<UploadMeta | null>(null);
+  const [targetMeta, setTargetMeta] = useState<UploadMeta | null>(null);
+
+  // §7: both compared images must share the same file type.
+  const formatMismatch =
+    !!refMeta && !!targetMeta && refMeta.ext !== targetMeta.ext;
+
+  // §1.0: the search-area restriction needs georeferencing on both images.
+  const geoAvailable = !!refMeta?.geo && !!targetMeta?.geo;
+
+  // §1/§5: search-area restriction and category selection are independent
+  // concerns (where to look vs. what to look for) — kept as separate state,
+  // each with its own dedicated UI section.
+  const [searchAreaEnabled, setSearchAreaEnabled] = useState(false);
+  const [searchArea, setSearchArea] = useState<SearchArea | null>(null);
+  const [categoryPreset, setCategoryPreset] = useState<CategoryPreset>("spitze");
+  const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(() =>
+    categoriesForPreset("spitze"),
+  );
 
   const [stage, setStage] = useState<Stage>("idle");
   const [progressMsg, setProgressMsg] = useState("");
@@ -125,7 +158,18 @@ export default function Home() {
 
   const startRef = useRef(0);
   const busy = stage !== "idle";
-  const canRun = !!refUrl && !!targetUrl && !busy;
+  // A search area isn't "active" until the user has actually picked a point —
+  // lat/lon default to NaN ("unset") in SearchAreaSection until then, so a
+  // shape/size edit alone can't accidentally run the search at (0, 0).
+  const hasValidPoint = !!searchArea && Number.isFinite(searchArea.lat) && Number.isFinite(searchArea.lon);
+  const activeSearchArea = searchAreaEnabled && geoAvailable && hasValidPoint ? searchArea : null;
+  const canRun =
+    !!refUrl &&
+    !!targetUrl &&
+    !busy &&
+    !formatMismatch &&
+    (!searchAreaEnabled || (geoAvailable && !!activeSearchArea)) &&
+    CATEGORIES.some((c) => selectedCategories[c]);
   const hasKey = !!keys[provider]?.trim();
   const providerShort = PROVIDERS[provider].label.split(" — ")[1] ?? PROVIDERS[provider].label;
 
@@ -175,7 +219,18 @@ export default function Home() {
       setStage("analyzing");
       setProgressMsg(t("progress.splitting"));
       const { overview, tiles } = await buildTiles(aligned.refUrl, aligned.targetUrl);
-      const tasks: Tile[] = [overview, ...tiles];
+
+      // §1: when the search area is enabled, only analyze regions that
+      // overlap the requested area (using the reference image's GeoTIFF
+      // georeferencing — see lib/geo.ts for why only the reference is needed).
+      const searchRect = activeSearchArea && refMeta?.geo ? searchAreaToNormalizedRect(refMeta.geo, activeSearchArea) : null;
+      let tasks: Tile[] = [overview, ...tiles];
+      if (searchRect) {
+        const restricted = tiles.filter((tile) =>
+          rectsOverlap(searchRect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
+        );
+        tasks = restricted.length > 0 ? restricted : tiles;
+      }
 
       let done = 0;
       const onTaskDone = () => {
@@ -280,13 +335,22 @@ export default function Home() {
           .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
       }
 
+      // §5.0/§5.4: keep only the selected change-type categories, and (in
+      // restricted-search mode) only changes whose center actually falls
+      // inside the requested search area — tiles overlap it loosely, so a
+      // detection near a tile edge can still sit just outside the area.
+      const filtered = confirmed
+        .filter((c) => selectedCategories[c.category as Category] ?? true)
+        .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c))
+        .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
+
       const failed = results.filter((r) => r.failed).length;
       const summary =
         results[0]?.summary ||
-        `${confirmed.length} change${confirmed.length === 1 ? "" : "s"} detected across ${tasks.length} regions.`;
+        `${filtered.length} change${filtered.length === 1 ? "" : "s"} detected across ${tasks.length} regions.`;
       const usedModel = results.map((r) => r.model).find(Boolean) || "";
 
-      setResult({ changes: confirmed, summary, model: usedModel });
+      setResult({ changes: filtered, summary, model: usedModel });
       if (failed > 0) {
         const firstErr = results.find((r) => r.failed)?.error || "unknown error";
         const allFailed = failed === tasks.length;
@@ -389,15 +453,54 @@ export default function Home() {
             label={t("upload.earlier")}
             sublabel={t("upload.earlierSub")}
             url={refUrl}
-            onFile={setRefUrl}
+            onFile={(dataUrl, meta) => {
+              setRefUrl(dataUrl);
+              setRefMeta(meta);
+              if (!meta.geo) {
+                setSearchArea(null);
+                setSearchAreaEnabled(false);
+              }
+            }}
           />
           <UploadZone
             label={t("upload.later")}
             sublabel={t("upload.laterSub")}
             url={targetUrl}
-            onFile={setTargetUrl}
+            onFile={(dataUrl, meta) => {
+              setTargetUrl(dataUrl);
+              setTargetMeta(meta);
+              if (!meta.geo) {
+                setSearchArea(null);
+                setSearchAreaEnabled(false);
+              }
+            }}
           />
         </div>
+
+        {formatMismatch && (
+          <div className="error" style={{ marginTop: 12 }}>
+            {t("upload.formatMismatch", { a: refMeta?.ext ?? "", b: targetMeta?.ext ?? "" })}
+          </div>
+        )}
+
+        <SearchAreaSection
+          geoAvailable={geoAvailable}
+          enabled={searchAreaEnabled}
+          setEnabled={setSearchAreaEnabled}
+          searchArea={searchArea}
+          setSearchArea={setSearchArea}
+          refUrl={refUrl}
+          targetUrl={targetUrl}
+          refGeo={refMeta?.geo ?? null}
+          targetGeo={targetMeta?.geo ?? null}
+        />
+
+        <CategorySection
+          preset={categoryPreset}
+          setPreset={setCategoryPreset}
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+        />
 
         <div className="row" style={{ gap: 12, marginTop: 14, flexWrap: "wrap" }}>
           <button onClick={run} disabled={!canRun} title={t("run.tip")}>
@@ -483,6 +586,8 @@ export default function Home() {
               visibleIds={visibleIds}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              refGeo={refMeta?.geo}
+              searchArea={activeSearchArea}
             />
           </div>
           <ReportTable
@@ -498,6 +603,8 @@ export default function Home() {
             setQuery={setQuery}
             refUrl={align.refUrl}
             targetUrl={align.targetUrl}
+            refGeo={refMeta?.geo}
+            merkblattArea={activeSearchArea}
           />
         </>
       )}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { extractGeoRef } from "@/lib/geoServer";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -77,6 +78,8 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const isTiff = ext === "tif" || ext === "tiff" || file.type === "image/tiff";
 
     let jpeg: Buffer;
     try {
@@ -86,8 +89,14 @@ export async function POST(req: NextRequest) {
       jpeg = await geotiffConvert(buffer);
     }
 
+    // GeoTIFFs carry georeferencing (geo keys + bounding box) independently of
+    // which pixel decoder above succeeded — extract it whenever the source is
+    // a TIFF, so the search-area restriction (only available for GeoTIFF
+    // input) and coordinate export can use it.
+    const geo = isTiff ? await extractGeoRef(buffer) : null;
+
     const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-    return NextResponse.json({ dataUrl });
+    return NextResponse.json({ dataUrl, geo });
   } catch (err) {
     const message = err instanceof Error ? err.message : "TIFF conversion failed";
     return NextResponse.json({ error: message }, { status: 500 });

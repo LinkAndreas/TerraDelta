@@ -1,0 +1,339 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useI18n, type StringKey } from "@/lib/i18n";
+import SearchAreaMap from "@/components/SearchAreaMap";
+import { DEFAULT_RADIUS_M, type GeoRef, type SearchArea, type SearchShape } from "@/lib/types";
+
+interface Props {
+  geoAvailable: boolean;
+  enabled: boolean;
+  setEnabled: (enabled: boolean) => void;
+  searchArea: SearchArea | null;
+  setSearchArea: (area: SearchArea | null) => void;
+  refUrl: string | null;
+  targetUrl: string | null;
+  refGeo: GeoRef | null;
+  targetGeo: GeoRef | null;
+}
+
+const SHAPES: SearchShape[] = ["circle", "rectangle"];
+const RADIUS_PRESETS = [100, 200, 500, 1000];
+
+export default function SearchAreaSection({
+  geoAvailable,
+  enabled,
+  setEnabled,
+  searchArea,
+  setSearchArea,
+  refUrl,
+  targetUrl,
+  refGeo,
+  targetGeo,
+}: Props) {
+  const { t } = useI18n();
+  const active = enabled && geoAvailable;
+
+  // lat/lon default to NaN ("no point picked yet") rather than 0 — 0/0 is a
+  // real place (off the coast of West Africa), so silently seeding it would
+  // let a shape/size-only edit turn into a runnable search at the wrong spot.
+  const area: SearchArea =
+    searchArea ?? {
+      shape: "circle",
+      lat: NaN,
+      lon: NaN,
+      radiusM: DEFAULT_RADIUS_M,
+      widthM: DEFAULT_RADIUS_M * 2,
+      heightM: DEFAULT_RADIUS_M * 2,
+    };
+  const update = (patch: Partial<SearchArea>) => setSearchArea({ ...area, ...patch });
+  const pointSet = Number.isFinite(area.lat) && Number.isFinite(area.lon);
+
+  return (
+    <div className="card" style={{ marginTop: 14, borderStyle: geoAvailable ? "solid" : "dashed" }}>
+      <div
+        className="row"
+        style={{
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 14,
+          opacity: geoAvailable ? 1 : 0.5,
+          transition: "opacity 0.15s ease",
+        }}
+      >
+        <div>
+          <strong style={{ fontSize: 15 }}>{t("search.heading")}</strong>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 3, maxWidth: 480 }}>
+            {t("search.subheading")}
+          </div>
+        </div>
+        <label className="switch" title={geoAvailable ? t("search.toggleTip") : t("search.needsGeoTiff")}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={!geoAvailable}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          <span className="switch-track">
+            <span className="switch-thumb" />
+          </span>
+        </label>
+      </div>
+
+      {!geoAvailable && (
+        <div className="row" style={{ gap: 6, marginTop: 12, fontSize: 12.5 }}>
+          <span aria-hidden>🔒</span>
+          <span className="muted">{t("search.needsGeoTiff")}</span>
+        </div>
+      )}
+
+      {geoAvailable && !enabled && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 12 }}>
+          {t("search.wholeImageNote")}
+        </div>
+      )}
+
+      {active && refUrl && targetUrl && refGeo && targetGeo && (
+        <div style={{ marginTop: 20 }}>
+          <SearchAreaMap
+            refUrl={refUrl}
+            targetUrl={targetUrl}
+            refGeo={refGeo}
+            targetGeo={targetGeo}
+            area={area}
+            pointSet={pointSet}
+            onChange={update}
+            onClear={() => setSearchArea(null)}
+          />
+
+          <div className="row" style={{ gap: 28, marginTop: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px", display: "grid", gap: 14 }}>
+              <GroupLabel icon="📍">{t("search.groupLocation")}</GroupLabel>
+              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                <NumberField
+                  label={t("search.lat")}
+                  value={area.lat}
+                  min={-90}
+                  max={90}
+                  decimals={4}
+                  placeholder={t("search.latPlaceholder")}
+                  onCommit={(n) => update({ lat: n })}
+                  width={140}
+                />
+                <NumberField
+                  label={t("search.lon")}
+                  value={area.lon}
+                  min={-180}
+                  max={180}
+                  decimals={4}
+                  placeholder={t("search.lonPlaceholder")}
+                  onCommit={(n) => update({ lon: n })}
+                  width={140}
+                />
+              </div>
+              {!pointSet && (
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {t("search.needsPoint")}
+                </div>
+              )}
+            </div>
+
+            <div style={{ flex: "1 1 260px", display: "grid", gap: 14 }}>
+              <GroupLabel icon="◻">{t("search.groupGeometry")}</GroupLabel>
+
+              <div className="segmented" style={{ width: "fit-content" }}>
+                {SHAPES.map((s) => (
+                  <button key={s} type="button" aria-pressed={area.shape === s} onClick={() => update({ shape: s })}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <ShapeIcon shape={s} />
+                      {t(`search.shape.${s}` as StringKey)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                {area.shape === "circle" ? (
+                  <NumberField
+                    label={t("search.radius")}
+                    value={area.radiusM}
+                    min={1}
+                    onCommit={(n) => update({ radiusM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M })}
+                    width={100}
+                  />
+                ) : (
+                  <>
+                    <NumberField
+                      label={t("search.width")}
+                      value={area.widthM}
+                      min={1}
+                      onCommit={(n) => update({ widthM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M * 2 })}
+                      width={100}
+                    />
+                    <NumberField
+                      label={t("search.height")}
+                      value={area.heightM}
+                      min={1}
+                      onCommit={(n) => update({ heightM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M * 2 })}
+                      width={100}
+                    />
+                  </>
+                )}
+                <span className="muted" style={{ fontSize: 12, paddingBottom: 9 }}>
+                  {t("search.unitMeters")}
+                </span>
+              </div>
+
+              {area.shape === "circle" && (
+                <div>
+                  <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>
+                    {t("search.quickPick")}
+                  </div>
+                  <PresetChips values={RADIUS_PRESETS} activeValue={area.radiusM} onPick={(v) => update({ radiusM: v })} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GroupLabel({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <div className="row" style={{ gap: 7, fontSize: 13.5, fontWeight: 600 }}>
+      <span aria-hidden>{icon}</span>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span className="field-label" style={{ marginBottom: 0 }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+// Free typing with commit-on-blur (or Enter): clamps to [min, max] and treats
+// an empty field as "unset" (NaN) rather than silently coercing to 0.
+function NumberField({
+  label,
+  value,
+  onCommit,
+  min,
+  max,
+  decimals,
+  placeholder,
+  width = 100,
+}: {
+  label: string;
+  value: number;
+  onCommit: (n: number) => void;
+  min?: number;
+  max?: number;
+  // Round the committed (and re-displayed) value to this many decimal
+  // places — e.g. 4 for lat/lon (~11 m precision), left unset for meters.
+  decimals?: number;
+  placeholder?: string;
+  width?: number;
+}) {
+  const [raw, setRaw] = useState(Number.isFinite(value) ? String(value) : "");
+
+  useEffect(() => {
+    setRaw(Number.isFinite(value) ? String(value) : "");
+  }, [value]);
+
+  const commit = () => {
+    if (raw.trim() === "") {
+      onCommit(NaN);
+      return;
+    }
+    let n = Number(raw);
+    if (!Number.isFinite(n)) {
+      setRaw(Number.isFinite(value) ? String(value) : "");
+      return;
+    }
+    if (min !== undefined) n = Math.max(min, n);
+    if (max !== undefined) n = Math.min(max, n);
+    if (decimals !== undefined) {
+      const factor = 10 ** decimals;
+      n = Math.round(n * factor) / factor;
+    }
+    onCommit(n);
+    setRaw(String(n));
+  };
+
+  return (
+    <Field label={label}>
+      <input
+        type="number"
+        step="any"
+        min={min}
+        max={max}
+        placeholder={placeholder}
+        value={raw}
+        onChange={(e) => setRaw(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        style={{ width }}
+      />
+    </Field>
+  );
+}
+
+function PresetChips({
+  values,
+  activeValue,
+  onPick,
+}: {
+  values: number[];
+  activeValue: number;
+  onPick: (v: number) => void;
+}) {
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      {values.map((v) => {
+        const isActive = v === activeValue;
+        return (
+          <button
+            key={v}
+            type="button"
+            className="chip-btn"
+            onClick={() => onPick(v)}
+            style={{
+              padding: "4px 12px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              ...(isActive ? { background: "var(--accent-soft)", borderColor: "var(--accent)", color: "var(--text)" } : {}),
+            }}
+          >
+            {v} m
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ShapeIcon({ shape }: { shape: SearchShape }) {
+  if (shape === "circle") {
+    return (
+      <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden>
+        <circle cx={7} cy={7} r={5.5} fill="none" stroke="currentColor" strokeWidth={1.5} />
+      </svg>
+    );
+  }
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden>
+      <rect x={1} y={3.5} width={12} height={7} rx={1.5} fill="none" stroke="currentColor" strokeWidth={1.5} />
+    </svg>
+  );
+}
