@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { CHANGE_COLORS, type Change } from "@/lib/types";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { CHANGE_COLORS, type Change, type GeoRef, type SearchArea } from "@/lib/types";
+import { searchAreaToOverlayShape, type OverlayShape } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
 
 type Mode = "old" | "new" | "slider" | "side";
@@ -15,6 +16,8 @@ interface Props {
   visibleIds: Set<string>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  refGeo?: GeoRef | null;
+  searchArea?: SearchArea | null;
 }
 
 export default function CompareView({
@@ -26,6 +29,8 @@ export default function CompareView({
   visibleIds,
   selectedId,
   onSelect,
+  refGeo,
+  searchArea,
 }: Props) {
   const { t } = useI18n();
   const [mode, setMode] = useState<Mode>("slider");
@@ -61,11 +66,49 @@ export default function CompareView({
     .map((c, i) => ({ c, n: i + 1 }))
     .filter(({ c }) => visibleIds.has(c.id));
 
+  const areaShape: OverlayShape | null = useMemo(() => {
+    if (!refGeo || !searchArea) return null;
+    try {
+      return searchAreaToOverlayShape(refGeo, searchArea);
+    } catch {
+      return null;
+    }
+  }, [refGeo, searchArea]);
+
+  const searchAreaOutline = areaShape ? (
+    areaShape.kind === "ellipse" ? (
+      <ellipse
+        cx={areaShape.cx * 100}
+        cy={areaShape.cy * 100}
+        rx={areaShape.rx * 100}
+        ry={areaShape.ry * 100}
+        fill="none"
+        stroke="#38bdf8"
+        strokeWidth={2}
+        strokeDasharray="3 2"
+        vectorEffect="non-scaling-stroke"
+      />
+    ) : (
+      <rect
+        x={areaShape.x * 100}
+        y={areaShape.y * 100}
+        width={areaShape.w * 100}
+        height={areaShape.h * 100}
+        fill="none"
+        stroke="#38bdf8"
+        strokeWidth={2}
+        strokeDasharray="3 2"
+        vectorEffect="non-scaling-stroke"
+      />
+    )
+  ) : null;
+
   const overlay = (maskId: string) =>
-    showBoxes ? (
+    showBoxes || areaShape ? (
       <>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="overlay-svg">
-          {spotlight && (
+          {searchAreaOutline}
+          {showBoxes && spotlight && (
             <>
               <defs>
                 <mask id={maskId}>
@@ -85,68 +128,70 @@ export default function CompareView({
               <rect x="0" y="0" width="100" height="100" fill="black" opacity="0.55" mask={`url(#${maskId})`} />
             </>
           )}
-          {shown.map(({ c }) => {
-            const [x, y, w, h] = c.bbox;
+          {showBoxes &&
+            shown.map(({ c }) => {
+              const [x, y, w, h] = c.bbox;
+              const color = CHANGE_COLORS[c.change_type];
+              const isSel = c.id === selectedId;
+              return (
+                <g key={c.id} style={{ cursor: "pointer" }} onClick={() => onSelect(isSel ? null : c.id)}>
+                  <rect
+                    x={x * 100}
+                    y={y * 100}
+                    width={w * 100}
+                    height={h * 100}
+                    fill={isSel ? color : "transparent"}
+                    fillOpacity={isSel ? 0.16 : 0}
+                    stroke="#000"
+                    strokeOpacity={0.85}
+                    strokeWidth={isSel ? 5 : 4}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <rect
+                    x={x * 100}
+                    y={y * 100}
+                    width={w * 100}
+                    height={h * 100}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={isSel ? 3 : 2}
+                    vectorEffect="non-scaling-stroke"
+                    className={isSel ? "pulse-rect" : undefined}
+                  />
+                </g>
+              );
+            })}
+        </svg>
+        {showBoxes &&
+          shown.map(({ c, n }) => {
+            const [x, y] = c.bbox;
             const color = CHANGE_COLORS[c.change_type];
-            const isSel = c.id === selectedId;
             return (
-              <g key={c.id} style={{ cursor: "pointer" }} onClick={() => onSelect(isSel ? null : c.id)}>
-                <rect
-                  x={x * 100}
-                  y={y * 100}
-                  width={w * 100}
-                  height={h * 100}
-                  fill={isSel ? color : "transparent"}
-                  fillOpacity={isSel ? 0.16 : 0}
-                  stroke="#000"
-                  strokeOpacity={0.85}
-                  strokeWidth={isSel ? 5 : 4}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <rect
-                  x={x * 100}
-                  y={y * 100}
-                  width={w * 100}
-                  height={h * 100}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={isSel ? 3 : 2}
-                  vectorEffect="non-scaling-stroke"
-                  className={isSel ? "pulse-rect" : undefined}
-                />
-              </g>
+              <span
+                key={c.id}
+                title={c.description}
+                onClick={() => onSelect(c.id === selectedId ? null : c.id)}
+                style={{
+                  position: "absolute",
+                  left: `${x * 100}%`,
+                  top: `${y * 100}%`,
+                  transform: "translate(-1px, -100%)",
+                  background: color,
+                  color: "#06121f",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  lineHeight: 1,
+                  padding: "2px 5px",
+                  borderRadius: "4px 4px 4px 0",
+                  cursor: "pointer",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.6)",
+                  outline: c.id === selectedId ? "2px solid #fff" : "none",
+                }}
+              >
+                {n}
+              </span>
             );
           })}
-        </svg>
-        {shown.map(({ c, n }) => {
-          const [x, y] = c.bbox;
-          const color = CHANGE_COLORS[c.change_type];
-          return (
-            <span
-              key={c.id}
-              title={c.description}
-              onClick={() => onSelect(c.id === selectedId ? null : c.id)}
-              style={{
-                position: "absolute",
-                left: `${x * 100}%`,
-                top: `${y * 100}%`,
-                transform: "translate(-1px, -100%)",
-                background: color,
-                color: "#06121f",
-                fontSize: 11,
-                fontWeight: 800,
-                lineHeight: 1,
-                padding: "2px 5px",
-                borderRadius: "4px 4px 4px 0",
-                cursor: "pointer",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.6)",
-                outline: c.id === selectedId ? "2px solid #fff" : "none",
-              }}
-            >
-              {n}
-            </span>
-          );
-        })}
       </>
     ) : null;
 

@@ -1,23 +1,24 @@
-import type { Change } from "./types";
+import type { Change, GeoRef, SearchArea } from "./types";
 import { CHANGE_COLORS, confLabel } from "./types";
+import { changeCenterLonLat } from "./geo";
 import { translate, type Lang, type StringKey } from "./i18n";
 
 // ── DIN A4 constants (all in mm) ──────────────────────────────────────────
-const PW = 210;
-const PH = 297;
-const M = 14; // margin
-const CW = PW - 2 * M; // 182 mm content width
+export const PW = 210;
+export const PH = 297;
+export const M = 14; // margin
+export const CW = PW - 2 * M; // 182 mm content width
 
 // Brand palette
-const BRAND: [number, number, number] = [185, 80, 43]; // #b9502b
-const BRAND_LIGHT: [number, number, number] = [224, 133, 90]; // #e0855a
-const DARK: [number, number, number] = [22, 26, 38];
-const MID: [number, number, number] = [90, 96, 112];
-const LIGHT_BG: [number, number, number] = [248, 247, 245];
+export const BRAND: [number, number, number] = [185, 80, 43]; // #b9502b
+export const BRAND_LIGHT: [number, number, number] = [224, 133, 90]; // #e0855a
+export const DARK: [number, number, number] = [22, 26, 38];
+export const MID: [number, number, number] = [90, 96, 112];
+export const LIGHT_BG: [number, number, number] = [248, 247, 245];
 const TABLE_STRIPE: [number, number, number] = [242, 240, 237];
-const WHITE: [number, number, number] = [255, 255, 255];
+export const WHITE: [number, number, number] = [255, 255, 255];
 
-function hex2rgb(hex: string): [number, number, number] {
+export function hex2rgb(hex: string): [number, number, number] {
   return [
     parseInt(hex.slice(1, 3), 16),
     parseInt(hex.slice(3, 5), 16),
@@ -26,7 +27,7 @@ function hex2rgb(hex: string): [number, number, number] {
 }
 
 // ── Logo SVG (matches Logo.tsx exactly) ──────────────────────────────────
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="192" height="192">
+export const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="192" height="192">
   <defs>
     <linearGradient id="td-bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#e0855a"/>
@@ -40,7 +41,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" wi
   <circle cx="24" cy="26" r="3.4" fill="#ffffff"/>
 </svg>`;
 
-async function svgToPng(svgStr: string, px: number): Promise<string> {
+export async function svgToPng(svgStr: string, px: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement("canvas");
     canvas.width = px;
@@ -62,12 +63,12 @@ async function svgToPng(svgStr: string, px: number): Promise<string> {
   });
 }
 
-interface RenderedImage {
+export interface RenderedImage {
   dataUrl: string;
   ar: number; // width / height
 }
 
-async function renderWithBoxes(srcUrl: string, changes: Change[], px: number): Promise<RenderedImage> {
+export async function renderWithBoxes(srcUrl: string, changes: Change[], px: number): Promise<RenderedImage> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -132,19 +133,20 @@ async function renderWithBoxes(srcUrl: string, changes: Change[], px: number): P
 
 // ── jsPDF helpers ─────────────────────────────────────────────────────────
 
-type Doc = import("jspdf").jsPDF;
+export type Doc = import("jspdf").jsPDF;
 
-function setFont(doc: Doc, style: "normal" | "bold", size: number, color: [number, number, number] = DARK) {
+export function setFont(doc: Doc, style: "normal" | "bold", size: number, color: [number, number, number] = DARK) {
   doc.setFont("helvetica", style);
   doc.setFontSize(size);
   doc.setTextColor(...color);
 }
 
-function drawPageHeader(
+export function drawPageHeader(
   doc: Doc,
   logoPng: string,
   compact: boolean,
   t: (k: StringKey, v?: Record<string, string | number>) => string,
+  title?: string,
 ) {
   const logoMm = compact ? 7 : 10;
   // Accent bar along the top
@@ -173,10 +175,10 @@ function drawPageHeader(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(compact ? 9 : 12);
   doc.setTextColor(...WHITE);
-  doc.text(t("pdf.title"), PW - M, ty, { align: "right" });
+  doc.text(title ?? t("pdf.title"), PW - M, ty, { align: "right" });
 }
 
-function drawPageFooter(doc: Doc, pageNum: number, totalPages: number, t: (k: StringKey, v?: Record<string, string | number>) => string) {
+export function drawPageFooter(doc: Doc, pageNum: number, totalPages: number, t: (k: StringKey, v?: Record<string, string | number>) => string) {
   const y = PH - 8;
   doc.setDrawColor(...BRAND_LIGHT);
   doc.setLineWidth(0.3);
@@ -445,4 +447,252 @@ export async function exportPdf(opts: {
   // ── Save ─────────────────────────────────────────────────────────────────
   const fileDateStr = new Date().toISOString().slice(0, 10);
   doc.save(`terradelta-report-${fileDateStr}.pdf`);
+}
+
+// ── Digitales Merkblatt (§6) ────────────────────────────────────────────────
+// A focused report for the restricted-search-area mode (§5.1): same visual
+// language as exportPdf, plus the search point/shape/size and a coordinates
+// column per change (only meaningful because this mode requires GeoTIFF
+// input, so `geo` is always available here).
+
+export async function exportMerkblatt(opts: {
+  refUrl: string;
+  targetUrl: string;
+  changes: Change[];
+  lang: Lang;
+  searchArea: SearchArea;
+  geo: GeoRef;
+}): Promise<void> {
+  const { default: jsPDF } = await import("jspdf");
+  const { refUrl, targetUrl, changes, lang, searchArea, geo } = opts;
+  const t = (key: StringKey, vars?: Record<string, string | number>) => translate(lang, key, vars);
+  const title = t("pdf.merkblattTitle");
+
+  const PX = 1000;
+  const [logoPng, refImg, tgtImg] = await Promise.all([
+    svgToPng(LOGO_SVG, 192),
+    renderWithBoxes(refUrl, changes, PX),
+    renderWithBoxes(targetUrl, changes, PX),
+  ]);
+
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+
+  // ── PAGE 1: header, search-area info box, both images ──────────────────
+  const HEADER_H = 26;
+  drawPageHeader(doc, logoPng, false, t, title);
+
+  const dateStr = new Intl.DateTimeFormat(lang === "de" ? "de-DE" : "en-GB", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date());
+  setFont(doc, "normal", 8, MID);
+  doc.text(t("pdf.generated", { date: dateStr }), PW - M, HEADER_H + 6, { align: "right" });
+
+  const infoY = HEADER_H + 10;
+  const infoH = 22;
+  doc.setFillColor(...LIGHT_BG);
+  doc.roundedRect(M, infoY, CW, infoH, 2, 2, "F");
+  doc.setFillColor(...BRAND);
+  doc.roundedRect(M, infoY, CW, 7, 2, 2, "F");
+  doc.rect(M, infoY + 3, CW, 4, "F");
+  setFont(doc, "bold", 8.5, WHITE);
+  doc.text(t("pdf.searchArea"), M + CW / 2, infoY + 4.8, { align: "center" });
+
+  const shapeLabel = t(`search.shape.${searchArea.shape}` as StringKey);
+  const sizeLabel =
+    searchArea.shape === "circle"
+      ? t("pdf.radiusValue", { r: searchArea.radiusM })
+      : t("pdf.rectValue", { w: searchArea.widthM, h: searchArea.heightM });
+
+  setFont(doc, "normal", 9, DARK);
+  doc.text(
+    `${t("search.lat")}: ${searchArea.lat.toFixed(6)}   ${t("search.lon")}: ${searchArea.lon.toFixed(6)}`,
+    M + 3,
+    infoY + 12,
+  );
+  doc.text(`${shapeLabel} · ${sizeLabel}`, M + 3, infoY + 18);
+
+  const imgAreaY = infoY + infoH + 6;
+  const IMG_MAX_H = Math.floor((PH - imgAreaY - 8 - 14 - 16) / 2) - 10;
+
+  function fitInSlot(ar: number): { w: number; h: number; xOff: number } {
+    const hByW = CW / ar;
+    if (hByW <= IMG_MAX_H) return { w: CW, h: hByW, xOff: 0 };
+    const w = IMG_MAX_H * ar;
+    return { w, h: IMG_MAX_H, xOff: (CW - w) / 2 };
+  }
+
+  const ref1 = fitInSlot(refImg.ar);
+  const tgt1 = fitInSlot(tgtImg.ar);
+
+  function drawImagePanel(
+    label: string,
+    img: { dataUrl: string },
+    fit: { w: number; h: number; xOff: number },
+    panelY: number,
+  ) {
+    const panelH = fit.h + 10;
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(M, panelY, CW, panelH, 2, 2, "F");
+    doc.setFillColor(...BRAND);
+    doc.roundedRect(M, panelY, CW, 7, 2, 2, "F");
+    doc.rect(M, panelY + 3, CW, 4, "F");
+    setFont(doc, "bold", 8.5, WHITE);
+    doc.text(label, M + CW / 2, panelY + 4.8, { align: "center" });
+    doc.addImage(img.dataUrl, "JPEG", M + fit.xOff + 1, panelY + 7.5, fit.w - 2, fit.h);
+  }
+
+  drawImagePanel(t("pdf.earlier"), refImg, ref1, imgAreaY);
+  const img2Y = imgAreaY + ref1.h + 10 + 8;
+  drawImagePanel(t("pdf.later"), tgtImg, tgt1, img2Y);
+
+  const legendY = img2Y + tgt1.h + 10 + 6;
+  setFont(doc, "normal", 8.5, MID);
+  doc.text(`${changes.length} ${t("pdf.changes").toLowerCase()}`, PW - M, legendY + 0.8, { align: "right" });
+
+  // ── TABLE PAGES (with a coordinates column) ─────────────────────────────
+  const colW = { num: 8, type: 20, cat: 20, coord: 36, conf: 16, desc: CW - 8 - 20 - 20 - 36 - 16 };
+  const ROW_PAD = 2.2;
+  const LINE_H = 4.0;
+  const FONT_SIZE_ROW = 8;
+
+  const COMPACT_HEADER_H = 20;
+  const TABLE_START_Y_P2 = COMPACT_HEADER_H + 10;
+  const TABLE_HEADER_H = 8;
+  const PAGE_TABLE_H = PH - TABLE_START_Y_P2 - TABLE_HEADER_H - 14;
+
+  type RowMeta = { lines: string[]; height: number; coord: string };
+  const rowMetas: RowMeta[] = changes.map((c) => {
+    const approxCharsPerLine = Math.floor(colW.desc / 1.85);
+    const words = c.description.split(" ");
+    const lns: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      if ((cur + (cur ? " " : "") + w).length <= approxCharsPerLine) {
+        cur = cur ? cur + " " + w : w;
+      } else {
+        if (cur) lns.push(cur);
+        cur = w;
+      }
+    }
+    if (cur) lns.push(cur);
+    const lineCount = Math.max(lns.length, 1);
+    const [lon, lat] = changeCenterLonLat(geo, c);
+    return { lines: lns, height: lineCount * LINE_H + ROW_PAD * 2, coord: `${lat.toFixed(5)}, ${lon.toFixed(5)}` };
+  });
+
+  let tablePages = 0;
+  let usedH = 0;
+  for (const rm of rowMetas) {
+    if (usedH + rm.height > PAGE_TABLE_H) {
+      tablePages++;
+      usedH = rm.height;
+    } else {
+      usedH += rm.height;
+    }
+  }
+  tablePages++;
+
+  const totalPages = 1 + tablePages;
+  drawPageFooter(doc, 1, totalPages, t);
+
+  const COL_X = {
+    num: M,
+    type: M + colW.num,
+    cat: M + colW.num + colW.type,
+    coord: M + colW.num + colW.type + colW.cat,
+    desc: M + colW.num + colW.type + colW.cat + colW.coord,
+    conf: M + colW.num + colW.type + colW.cat + colW.coord + colW.desc,
+  };
+
+  function drawTableHeader(y: number) {
+    doc.setFillColor(...DARK);
+    doc.rect(M, y, CW, TABLE_HEADER_H, "F");
+    setFont(doc, "bold", 8, WHITE);
+    const mid = y + TABLE_HEADER_H / 2 + 1.2;
+    doc.text(t("th.num"), COL_X.num + colW.num / 2, mid, { align: "center" });
+    doc.text(t("th.type"), COL_X.type + 2, mid);
+    doc.text(t("th.category"), COL_X.cat + 2, mid);
+    doc.text(t("th.coordinates"), COL_X.coord + 2, mid);
+    doc.text(t("th.description"), COL_X.desc + 2, mid);
+    doc.text(t("th.conf"), COL_X.conf + 2, mid);
+  }
+
+  let pageIdx = 2;
+  let curY = 0;
+  let firstTablePage = true;
+
+  function startTablePage() {
+    doc.addPage();
+    drawPageHeader(doc, logoPng, true, t, title);
+    let y = COMPACT_HEADER_H + 4;
+
+    if (firstTablePage) {
+      setFont(doc, "bold", 12, DARK);
+      doc.text(t("pdf.changes"), M, y + 5);
+      y += 10;
+      firstTablePage = false;
+    }
+
+    drawTableHeader(y);
+    curY = y + TABLE_HEADER_H;
+    drawPageFooter(doc, pageIdx, totalPages, t);
+    pageIdx++;
+  }
+
+  startTablePage();
+
+  for (let i = 0; i < changes.length; i++) {
+    const c = changes[i];
+    const rm = rowMetas[i];
+
+    if (curY + rm.height > PH - 14) {
+      startTablePage();
+    }
+
+    if (i % 2 === 1) {
+      doc.setFillColor(...TABLE_STRIPE);
+      doc.rect(M, curY, CW, rm.height, "F");
+    }
+
+    const color = hex2rgb(CHANGE_COLORS[c.change_type]);
+    const rowMid = curY + rm.height / 2 + 1.1;
+
+    setFont(doc, "bold", FONT_SIZE_ROW, MID);
+    doc.text(String(i + 1), COL_X.num + colW.num / 2, rowMid, { align: "center" });
+
+    doc.setFillColor(...color);
+    doc.roundedRect(COL_X.type + 1, curY + rm.height / 2 - 2.5, colW.type - 4, 5, 1.5, 1.5, "F");
+    setFont(doc, "bold", 7, WHITE);
+    doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
+
+    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
+    const catKey = `cat.${c.category}` as StringKey;
+    const catStr = t(catKey) !== catKey ? t(catKey) : c.category;
+    doc.text(catStr, COL_X.cat + 2, rowMid);
+
+    setFont(doc, "normal", 7, DARK);
+    doc.text(rm.coord, COL_X.coord + 2, rowMid);
+
+    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
+    const lineCount = rm.lines.length;
+    const blockH = lineCount * LINE_H;
+    const startY = curY + (rm.height - blockH) / 2 + LINE_H * 0.85;
+    rm.lines.forEach((line, li) => {
+      doc.text(line, COL_X.desc + 2, startY + li * LINE_H);
+    });
+
+    setFont(doc, "bold", FONT_SIZE_ROW, MID);
+    doc.text(confLabel(c.confidence), COL_X.conf + 2, rowMid);
+
+    doc.setDrawColor(220, 218, 215);
+    doc.setLineWidth(0.15);
+    doc.line(M, curY + rm.height, M + CW, curY + rm.height);
+
+    curY += rm.height;
+  }
+
+  const fileDateStr = new Date().toISOString().slice(0, 10);
+  doc.save(`terradelta-merkblatt-${fileDateStr}.pdf`);
 }

@@ -9,12 +9,17 @@ export const CATEGORIES = [
   "house",
   "road",
   "bridge",
+  "railway",
   "plot",
   "water",
   "vegetation",
   "other",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
+
+// Categories checked by default in "Spitzenaktualität" (priority currency)
+// mode; "Grundaktualität" (baseline currency) mode checks every category.
+export const PRIORITY_CATEGORIES: Category[] = ["building", "road", "bridge"];
 
 export interface Change {
   id: string;
@@ -53,3 +58,46 @@ export const CHANGE_COLORS: Record<ChangeType, string> = {
 
 export const CONF_PCT: Record<Confidence, number> = { low: 35, medium: 65, high: 90 };
 export const confLabel = (c: Confidence): string => `${CONF_PCT[c]}%`;
+
+// ── Georeferencing (from GeoTIFF input) ────────────────────────────────────
+
+// Enough to map pixel <-> geographic coordinates for one image: a proj4
+// definition for the raster's native CRS, its bounding box in that CRS
+// ([minX, minY, maxX, maxY], north-up assumed), and its original pixel size.
+export interface GeoRef {
+  proj4Def: string;
+  bbox: [number, number, number, number];
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
+// ── Search-area restriction (requires GeoTIFF input for both images) ──────
+
+export type SearchShape = "circle" | "rectangle";
+
+export interface SearchArea {
+  shape: SearchShape;
+  lat: number;
+  lon: number;
+  // Circle: radiusM. Rectangle: widthM x heightM (a square is just a
+  // rectangle with widthM === heightM).
+  radiusM: number;
+  widthM: number;
+  heightM: number;
+}
+
+export const DEFAULT_RADIUS_M = 200;
+
+// ── Category selection presets (§5.0) ──────────────────────────────────────
+// "spitze" (Spitzenaktualität) and "grund" (Grundaktualität) lock the
+// category checkboxes to a fixed set; "custom" (Benutzerdefiniert) unlocks
+// them for the user to pick freely. Independent of whether a search area is
+// active — the two are separate concerns (what to look for vs. where).
+export type CategoryPreset = "spitze" | "grund" | "custom";
+
+export function categoriesForPreset(preset: CategoryPreset): Record<Category, boolean> {
+  const useAll = preset === "grund";
+  return Object.fromEntries(
+    CATEGORIES.map((c) => [c, useAll || PRIORITY_CATEGORIES.includes(c)]),
+  ) as Record<Category, boolean>;
+}

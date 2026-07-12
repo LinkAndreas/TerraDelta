@@ -2,12 +2,18 @@
 
 import { useRef, useState } from "react";
 import { useI18n, type StringKey } from "@/lib/i18n";
+import type { GeoRef } from "@/lib/types";
+
+export interface UploadMeta {
+  ext: string;
+  geo: GeoRef | null;
+}
 
 interface Props {
   label: string;
   sublabel: string;
   url: string | null;
-  onFile: (dataUrl: string) => void;
+  onFile: (dataUrl: string, meta: UploadMeta) => void;
 }
 
 export default function UploadZone({ label, sublabel, url, onFile }: Props) {
@@ -15,6 +21,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [tiffError, setTiffError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   const ACCEPTED_EXTS = ["png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp", "gif"];
 
@@ -27,6 +34,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
 
     if (!file.type.startsWith("image/") && !ACCEPTED_EXTS.includes(ext)) return;
     setTiffError(null);
+    setFileName(file.name);
 
     if (isTiff) {
       const reader = new FileReader();
@@ -34,7 +42,23 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
         const buffer = reader.result as ArrayBuffer;
         const blob = new Blob([buffer], { type: "image/tiff" });
 
-        // 1. Try native browser decode via object URL (works in Safari on macOS)
+        // 1. Server-side conversion (handles all TIFF variants via sharp,
+        //    falling back to geotiff.js) — this is also where GeoTIFF
+        //    georeferencing is extracted, so it must run whenever possible.
+        try {
+          const form = new FormData();
+          form.append("file", blob, file.name);
+          const res = await fetch("/api/tiff", { method: "POST", body: form });
+          const json = await res.json();
+          if (!res.ok || json.error) throw new Error(json.error ?? "Server conversion failed");
+          onFile(json.dataUrl as string, { ext, geo: json.geo ?? null });
+          return;
+        } catch (err) {
+          console.warn("Server TIFF conversion failed, trying native decode:", err);
+        }
+
+        // 2. Fallback: native browser decode via object URL (works in Safari
+        //    on macOS). No georeferencing is available on this path.
         try {
           const objectUrl = URL.createObjectURL(blob);
           const canvas = await new Promise<HTMLCanvasElement>((resolve, reject) => {
@@ -54,20 +78,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
             img.src = objectUrl;
           });
           URL.revokeObjectURL(objectUrl);
-          onFile(toJpeg(canvas));
-          return;
-        } catch {
-          // Browser can't decode TIFF natively (Chrome/Firefox) — fall through
-        }
-
-        // 2. Server-side conversion via sharp (handles all TIFF variants)
-        try {
-          const form = new FormData();
-          form.append("file", blob, file.name);
-          const res = await fetch("/api/tiff", { method: "POST", body: form });
-          const json = await res.json();
-          if (!res.ok || json.error) throw new Error(json.error ?? "Server conversion failed");
-          onFile(json.dataUrl as string);
+          onFile(toJpeg(canvas), { ext, geo: null });
         } catch (err) {
           setTiffError(t("upload.tiffError" as StringKey));
           console.warn("TIFF conversion failed:", err);
@@ -85,9 +96,9 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
           canvas.width = img.naturalWidth;
           canvas.height = img.naturalHeight;
           canvas.getContext("2d")!.drawImage(img, 0, 0);
-          onFile(toJpeg(canvas));
+          onFile(toJpeg(canvas), { ext, geo: null });
         };
-        img.onerror = () => onFile(raw);
+        img.onerror = () => onFile(raw, { ext, geo: null });
         img.src = raw;
       };
       reader.readAsDataURL(file);
@@ -150,6 +161,27 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
           >
             {label}
           </span>
+          {fileName && (
+            <span
+              title={fileName}
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                fontSize: 11.5,
+                padding: "5px 10px",
+                background: "rgba(0,0,0,0.6)",
+                color: "#fff",
+                textAlign: "left",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {fileName}
+            </span>
+          )}
         </>
       ) : (
         <div style={{ padding: 20 }}>
