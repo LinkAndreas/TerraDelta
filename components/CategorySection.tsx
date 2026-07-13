@@ -8,17 +8,19 @@ interface Props {
   setPreset: (preset: CategoryPreset) => void;
   selectedCategories: Record<Category, boolean>;
   setSelectedCategories: (c: Record<Category, boolean>) => void;
+  disabled?: boolean;
 }
 
 const PRESETS: { key: CategoryPreset; label: StringKey; hint: StringKey }[] = [
-  { key: "spitze", label: "preset.spitze", hint: "preset.spitzeHint" },
   { key: "grund", label: "preset.grund", hint: "preset.grundHint" },
+  { key: "spitze", label: "preset.spitze", hint: "preset.spitzeHint" },
   { key: "custom", label: "preset.custom", hint: "preset.customHint" },
 ];
 
-export default function CategorySection({ preset, setPreset, selectedCategories, setSelectedCategories }: Props) {
+export default function CategorySection({ preset, setPreset, selectedCategories, setSelectedCategories, disabled = false }: Props) {
   const { t } = useI18n();
   const locked = preset !== "custom";
+  const checkboxesDisabled = locked || disabled;
 
   function applyPreset(next: CategoryPreset) {
     setPreset(next);
@@ -39,6 +41,7 @@ export default function CategorySection({ preset, setPreset, selectedCategories,
             type="button"
             aria-pressed={preset === p.key}
             title={t(p.hint)}
+            disabled={disabled}
             onClick={() => applyPreset(p.key)}
           >
             {t(p.label)}
@@ -46,22 +49,29 @@ export default function CategorySection({ preset, setPreset, selectedCategories,
         ))}
       </div>
 
-      {locked && (
-        <div className="row" style={{ gap: 6, marginTop: 14, fontSize: 12.5 }}>
+      {disabled ? (
+        <div className="locked-note" style={{ marginTop: 14 }} title={t("run.lockedTip")}>
           <span aria-hidden>🔒</span>
-          <span className="muted">{t("category.locked", { preset: t(PRESETS.find((p) => p.key === preset)!.label) })}</span>
+          {t("run.locked")}
         </div>
+      ) : (
+        locked && (
+          <div className="row" style={{ gap: 6, marginTop: 14, fontSize: 12.5 }}>
+            <span aria-hidden>🔒</span>
+            <span className="muted">{t("category.locked", { preset: t(PRESETS.find((p) => p.key === preset)!.label) })}</span>
+          </div>
+        )
       )}
 
-      <div className="row" style={{ gap: 8, marginTop: locked ? 8 : 16, flexWrap: "wrap" }}>
+      <div className="row" style={{ gap: 8, marginTop: locked || disabled ? 8 : 16, flexWrap: "wrap" }}>
         {CATEGORIES.map((cat) => {
           const checked = selectedCategories[cat];
           return (
-            <label key={cat} className="chip-checkbox" data-checked={checked} data-disabled={locked}>
+            <label key={cat} className="chip-checkbox" data-checked={checked} data-disabled={checkboxesDisabled}>
               <input
                 type="checkbox"
                 checked={checked}
-                disabled={locked}
+                disabled={checkboxesDisabled}
                 onChange={(e) => setSelectedCategories({ ...selectedCategories, [cat]: e.target.checked })}
               />
               <span className="chip-checkbox-mark">{checked ? "✓" : ""}</span>

@@ -15,6 +15,7 @@ interface Props {
   targetUrl: string | null;
   refGeo: GeoRef | null;
   targetGeo: GeoRef | null;
+  disabled?: boolean;
 }
 
 const SHAPES: SearchShape[] = ["circle", "rectangle"];
@@ -30,6 +31,7 @@ export default function SearchAreaSection({
   targetUrl,
   refGeo,
   targetGeo,
+  disabled = false,
 }: Props) {
   const { t } = useI18n();
   const active = enabled && geoAvailable;
@@ -67,11 +69,14 @@ export default function SearchAreaSection({
             {t("search.subheading")}
           </div>
         </div>
-        <label className="switch" title={geoAvailable ? t("search.toggleTip") : t("search.needsGeoTiff")}>
+        <label
+          className="switch"
+          title={!geoAvailable ? t("search.needsGeoTiff") : disabled ? t("run.lockedTip") : t("search.toggleTip")}
+        >
           <input
             type="checkbox"
             checked={enabled}
-            disabled={!geoAvailable}
+            disabled={!geoAvailable || disabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
           <span className="switch-track">
@@ -87,7 +92,14 @@ export default function SearchAreaSection({
         </div>
       )}
 
-      {geoAvailable && !enabled && (
+      {geoAvailable && disabled && (
+        <div className="locked-note" style={{ marginTop: 12 }} title={t("run.lockedTip")}>
+          <span aria-hidden>🔒</span>
+          {t("run.locked")}
+        </div>
+      )}
+
+      {geoAvailable && !enabled && !disabled && (
         <div className="muted" style={{ fontSize: 12.5, marginTop: 12 }}>
           {t("search.wholeImageNote")}
         </div>
@@ -104,6 +116,7 @@ export default function SearchAreaSection({
             pointSet={pointSet}
             onChange={update}
             onClear={() => setSearchArea(null)}
+            disabled={disabled}
           />
 
           <div className="row" style={{ gap: 28, marginTop: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -119,6 +132,7 @@ export default function SearchAreaSection({
                   placeholder={t("search.latPlaceholder")}
                   onCommit={(n) => update({ lat: n })}
                   width={140}
+                  disabled={disabled}
                 />
                 <NumberField
                   label={t("search.lon")}
@@ -129,6 +143,7 @@ export default function SearchAreaSection({
                   placeholder={t("search.lonPlaceholder")}
                   onCommit={(n) => update({ lon: n })}
                   width={140}
+                  disabled={disabled}
                 />
               </div>
               {!pointSet && (
@@ -143,7 +158,13 @@ export default function SearchAreaSection({
 
               <div className="segmented" style={{ width: "fit-content" }}>
                 {SHAPES.map((s) => (
-                  <button key={s} type="button" aria-pressed={area.shape === s} onClick={() => update({ shape: s })}>
+                  <button
+                    key={s}
+                    type="button"
+                    aria-pressed={area.shape === s}
+                    disabled={disabled}
+                    onClick={() => update({ shape: s })}
+                  >
                     <span className="row" style={{ gap: 6 }}>
                       <ShapeIcon shape={s} />
                       {t(`search.shape.${s}` as StringKey)}
@@ -160,6 +181,7 @@ export default function SearchAreaSection({
                     min={1}
                     onCommit={(n) => update({ radiusM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M })}
                     width={100}
+                    disabled={disabled}
                   />
                 ) : (
                   <>
@@ -169,6 +191,7 @@ export default function SearchAreaSection({
                       min={1}
                       onCommit={(n) => update({ widthM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M * 2 })}
                       width={100}
+                      disabled={disabled}
                     />
                     <NumberField
                       label={t("search.height")}
@@ -176,6 +199,7 @@ export default function SearchAreaSection({
                       min={1}
                       onCommit={(n) => update({ heightM: Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M * 2 })}
                       width={100}
+                      disabled={disabled}
                     />
                   </>
                 )}
@@ -189,7 +213,12 @@ export default function SearchAreaSection({
                   <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>
                     {t("search.quickPick")}
                   </div>
-                  <PresetChips values={RADIUS_PRESETS} activeValue={area.radiusM} onPick={(v) => update({ radiusM: v })} />
+                  <PresetChips
+                    values={RADIUS_PRESETS}
+                    activeValue={area.radiusM}
+                    onPick={(v) => update({ radiusM: v })}
+                    disabled={disabled}
+                  />
                 </div>
               )}
             </div>
@@ -222,6 +251,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // Free typing with commit-on-blur (or Enter): clamps to [min, max] and treats
 // an empty field as "unset" (NaN) rather than silently coercing to 0.
+// Uses type="text" + inputMode="decimal" (not type="number") so it renders
+// through the same input styling as every other text field in the app —
+// type="number" picks up the browser's native spin buttons and, without a
+// placeholder set, falls outside the app's input CSS entirely.
 function NumberField({
   label,
   value,
@@ -231,6 +264,7 @@ function NumberField({
   decimals,
   placeholder,
   width = 100,
+  disabled = false,
 }: {
   label: string;
   value: number;
@@ -242,12 +276,21 @@ function NumberField({
   decimals?: number;
   placeholder?: string;
   width?: number;
+  disabled?: boolean;
 }) {
-  const [raw, setRaw] = useState(Number.isFinite(value) ? String(value) : "");
+  // Values driven by dragging on the map (radius/width/height, in meters)
+  // arrive with float noise — round for display the same way a manual
+  // commit would (0 decimals unless the field asks for more, as lat/lon do).
+  const displayValue = (n: number) => {
+    const factor = 10 ** (decimals ?? 0);
+    return Math.round(n * factor) / factor;
+  };
+
+  const [raw, setRaw] = useState(Number.isFinite(value) ? String(displayValue(value)) : "");
 
   useEffect(() => {
-    setRaw(Number.isFinite(value) ? String(value) : "");
-  }, [value]);
+    setRaw(Number.isFinite(value) ? String(displayValue(value)) : "");
+  }, [value, decimals]);
 
   const commit = () => {
     if (raw.trim() === "") {
@@ -272,12 +315,11 @@ function NumberField({
   return (
     <Field label={label}>
       <input
-        type="number"
-        step="any"
-        min={min}
-        max={max}
+        type="text"
+        inputMode="decimal"
         placeholder={placeholder}
         value={raw}
+        disabled={disabled}
         onChange={(e) => setRaw(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -293,10 +335,12 @@ function PresetChips({
   values,
   activeValue,
   onPick,
+  disabled = false,
 }: {
   values: number[];
   activeValue: number;
   onPick: (v: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -307,6 +351,7 @@ function PresetChips({
             key={v}
             type="button"
             className="chip-btn"
+            disabled={disabled}
             onClick={() => onPick(v)}
             style={{
               padding: "4px 12px",

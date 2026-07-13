@@ -10,9 +10,9 @@ export const LANG_NAMES: Record<Lang, string> = { en: "English", de: "Deutsch" }
 export const STRINGS = {
   en: {
     "app.title": "TerraDelta",
-    "app.tagline": "Orthophoto change analyzer",
+    "app.tagline": "Aerial photo change detector",
     "app.subtitle":
-      "AI-powered semantic change detection between two aerial orthophotos. Images are co-registered, split into high-resolution tiles, and analyzed region by region to find added / removed / modified buildings, roads, plots and land development — while ignoring season, lighting and shadows.",
+      "Compare two aerial photos of the same area and automatically find what changed — new or demolished buildings, roads, and land development — while ignoring season, lighting, and shadows.",
 
     "lang.label": "Language",
     "theme.toLight": "Switch to light mode",
@@ -36,9 +36,16 @@ export const STRINGS = {
       "Your API key, stored only in this browser. Leave empty to use the server's key.",
     "settings.tipClear": "Remove the key and fall back to the server's environment key.",
     "settings.tipOpen": "Open settings — choose provider, model and API key.",
+    "settings.tipReady": "Model ready. Click to change provider, model, or API key.",
+    "settings.tipLimited": "API limit reached — click to check your provider settings or switch keys.",
     "common.close": "Close",
     "common.done": "Done",
-    "run.needKey": "No API key set — open settings to add one.",
+    "run.needKey": "No API key — click to add one",
+    "run.locked": "Locked while running",
+    "run.lockedTip": "Images and options can't be changed until the current analysis finishes.",
+    "alert.rateLimit.heading": "API limit reached",
+    "alert.rateLimit.body":
+      "The provider rejected one or more requests due to a rate limit or usage quota. Wait a moment and try again, or switch to a different API key or model in Settings.",
 
     "upload.earlier": "Earlier capture (reference)",
     "upload.earlierSub": "e.g. 2021",
@@ -50,29 +57,27 @@ export const STRINGS = {
     "upload.formatMismatch": "Both images must be the same file type ({a} vs {b}). Re-upload them in a matching format.",
 
     "run.detect": "Detect changes",
-    "run.loading": "Loading alignment engine…",
+    "run.loading": "Getting ready…",
     "run.aligning": "Aligning images…",
     "run.analyzing": "Detecting changes…",
-    "run.tip": "Align both images and analyze them for semantic changes.",
+    "run.tip": "Align both images and analyze them for changes.",
 
-    "step.load": "Load engine",
+    "step.load": "Prepare",
     "step.align": "Align",
     "step.detect": "Detect changes",
 
-    "progress.initEngine":
-      "Initializing alignment engine (OpenCV, bundled locally — first run only)…",
-    "progress.engineReady": "Alignment engine ready.",
-    "progress.aligning": "Co-registering images — ORB feature matching + RANSAC homography…",
-    "progress.splitting": "Splitting the scene into high-resolution regions…",
-    "progress.region": "Analyzing region {done}/{total} with the vision model…",
-    "progress.merging": "Merging overlapping regions and de-duplicating…",
-    "progress.verifying": "Verifying candidate {done}/{total} at high zoom…",
+    "progress.initEngine": "Getting ready (first run takes a little longer)…",
+    "progress.engineReady": "Ready.",
+    "progress.aligning": "Aligning the two images…",
+    "progress.splitting": "Splitting the image into close-up sections…",
+    "progress.region": "Analyzing section {done}/{total}…",
+    "progress.merging": "Combining results…",
+    "progress.verifying": "Double-checking change {done}/{total}…",
 
-    "align.matched": "Aligned via feature matching ({n} matches)",
-    "align.fallback": "Alignment fell back to resize — results may be noisier",
+    "align.matched": "Images aligned ({n} matching points found)",
+    "align.fallback": "Couldn't precisely align the images — results may be less accurate",
 
-    "note.pipeline":
-      "Alignment runs in your browser; tiles are analyzed server-side. Larger scenes mean more regions (and a few more seconds).",
+    "note.pipeline": "Larger images take a bit longer to process.",
 
     "error.someFailed": "{failed} of {total} regions failed — results may be incomplete. Error: {err}",
     "error.allFailed": "{failed} of {total} regions failed. Error: {err}",
@@ -130,6 +135,12 @@ export const STRINGS = {
     "search.clear": "Clear",
     "search.clearTip": "Remove the search area and draw a new one.",
 
+    "options.heading": "Options",
+    "options.subheading": "Where to look and what to look for. Sensible defaults are already selected.",
+    "options.wholeImage": "whole image",
+    "options.tipExpand": "Show search area and category options",
+    "options.tipCollapse": "Hide options",
+
     "category.heading": "Change type categories",
     "category.subheading": "Choose a preset or pick categories individually. Spitzenaktualität and Grundaktualität lock the selection to a fixed set; Benutzerdefiniert lets you choose freely.",
     "preset.spitze": "Spitzenaktualität",
@@ -142,15 +153,17 @@ export const STRINGS = {
 
     "report.heading": "Change report ({n})",
     "report.headingOf": "Change report ({n} of {total})",
-    "report.export": "Export PDF",
-    "report.tipExport": "Download a professional PDF report with annotated images and change table.",
-    "report.exportCsv": "Export CSV",
-    "report.tipExportCsv": "Download the visible changes as CSV, with coordinates.",
-    "report.exportGeoJson": "Export GeoJSON (QGIS)",
-    "report.tipExportGeoJson": "Download a GeoJSON point layer (EPSG:4326) that opens directly in QGIS.",
+    "report.export": "Export",
+    "report.tipExport": "Download the results as a PDF report, CSV, or GeoJSON.",
+    "report.exportPdf": "PDF report",
+    "report.tipExportPdf": "A professional PDF report with annotated images and a change table.",
+    "report.exportCsv": "CSV",
+    "report.tipExportCsv": "The visible changes as CSV, with coordinates.",
+    "report.exportGeoJson": "GeoJSON (QGIS)",
+    "report.tipExportGeoJson": "A GeoJSON point layer (EPSG:4326) that opens directly in QGIS.",
     "report.needsGeoTiffForExport": "CSV and GeoJSON export (with coordinates) require GeoTIFF input — upload both images as GeoTIFFs to enable them.",
-    "report.exportMerkblatt": "Export Merkblatt (PDF)",
-    "report.tipExportMerkblatt": "Download a digital fact sheet (Merkblatt) for the restricted search area.",
+    "report.exportMerkblatt": "Digital fact sheet (Merkblatt)",
+    "report.tipExportMerkblatt": "A digital fact sheet (Merkblatt) for the restricted search area.",
 
     "pdf.title": "Change Report",
     "pdf.subtitle": "Orthophoto Change Analysis",
@@ -199,10 +212,10 @@ export const STRINGS = {
     "cat.other": "other",
 
     "how.heading": "How it works",
-    "how.1": "Both images are co-registered in-browser using ORB feature matching + a RANSAC homography.",
-    "how.2": "The aligned pair is split into overlapping high-resolution tiles plus one overview pass.",
-    "how.3": "Each region is analyzed by a vision model that reasons about genuine structural / land-use changes (ignoring season, lighting and shadows).",
-    "how.4": "Detections are mapped back to global coordinates, de-duplicated, re-verified on zoomed-in crops, highlighted and listed.",
+    "how.1": "We automatically align both images so they line up precisely.",
+    "how.2": "The image is broken into close-up sections so even small changes are visible.",
+    "how.3": "AI compares each section and identifies genuine changes — ignoring season, lighting, and shadows.",
+    "how.4": "Every result is double-checked, then highlighted and listed for you to review.",
 
     "onboard.heading": "Getting started",
     "onboard.subtitle": "Follow these steps to compare two orthophotos.",
@@ -226,9 +239,9 @@ export const STRINGS = {
 
   de: {
     "app.title": "TerraDelta",
-    "app.tagline": "Orthophoto-Veränderungsanalyse",
+    "app.tagline": "Veränderungserkennung für Luftbilder",
     "app.subtitle":
-      "KI-gestützte semantische Veränderungserkennung zwischen zwei Luftbild-Orthophotos. Die Bilder werden überlagert, in hochaufgelöste Kacheln zerlegt und Region für Region analysiert, um hinzugefügte / entfernte / veränderte Gebäude, Straßen, Grundstücke und Landentwicklung zu finden — Jahreszeit, Beleuchtung und Schatten werden ignoriert.",
+      "Vergleichen Sie zwei Luftbilder derselben Fläche und finden Sie automatisch, was sich verändert hat — neue oder abgerissene Gebäude, Straßen und Landentwicklung — Jahreszeit, Licht und Schatten werden dabei ignoriert.",
 
     "lang.label": "Sprache",
     "theme.toLight": "Zum hellen Modus wechseln",
@@ -252,9 +265,16 @@ export const STRINGS = {
       "Ihr API-Schlüssel, nur in diesem Browser gespeichert. Leer lassen, um den Server-Schlüssel zu nutzen.",
     "settings.tipClear": "Schlüssel entfernen und auf den Server-Schlüssel zurückgreifen.",
     "settings.tipOpen": "Einstellungen öffnen — Anbieter, Modell und API-Schlüssel wählen.",
+    "settings.tipReady": "Modell einsatzbereit. Klicken, um Anbieter, Modell oder API-Schlüssel zu ändern.",
+    "settings.tipLimited": "API-Limit erreicht — klicken, um die Anbieter-Einstellungen zu prüfen oder den Schlüssel zu wechseln.",
     "common.close": "Schließen",
     "common.done": "Fertig",
-    "run.needKey": "Kein API-Schlüssel gesetzt — Einstellungen öffnen, um einen hinzuzufügen.",
+    "run.needKey": "Kein API-Schlüssel — zum Hinzufügen klicken",
+    "run.locked": "Gesperrt während der Ausführung",
+    "run.lockedTip": "Bilder und Optionen können erst geändert werden, wenn die laufende Analyse abgeschlossen ist.",
+    "alert.rateLimit.heading": "API-Limit erreicht",
+    "alert.rateLimit.body":
+      "Der Anbieter hat eine oder mehrere Anfragen wegen eines Rate-Limits oder Nutzungskontingents abgelehnt. Warten Sie einen Moment und versuchen Sie es erneut, oder wechseln Sie in den Einstellungen zu einem anderen API-Schlüssel oder Modell.",
 
     "upload.earlier": "Frühere Aufnahme (Referenz)",
     "upload.earlierSub": "z. B. 2021",
@@ -266,29 +286,27 @@ export const STRINGS = {
     "upload.formatMismatch": "Beide Bilder müssen denselben Dateityp haben ({a} vs. {b}). Bitte beide im gleichen Format erneut hochladen.",
 
     "run.detect": "Veränderungen erkennen",
-    "run.loading": "Lade Ausrichtungs-Engine…",
+    "run.loading": "Wird vorbereitet…",
     "run.aligning": "Richte Bilder aus…",
     "run.analyzing": "Erkenne Veränderungen…",
-    "run.tip": "Beide Bilder ausrichten und auf semantische Veränderungen analysieren.",
+    "run.tip": "Beide Bilder ausrichten und auf Veränderungen analysieren.",
 
-    "step.load": "Engine laden",
+    "step.load": "Vorbereiten",
     "step.align": "Ausrichten",
     "step.detect": "Erkennen",
 
-    "progress.initEngine":
-      "Initialisiere Ausrichtungs-Engine (OpenCV, lokal gebündelt — nur beim ersten Lauf)…",
-    "progress.engineReady": "Ausrichtungs-Engine bereit.",
-    "progress.aligning": "Überlagere Bilder — ORB-Merkmalsabgleich + RANSAC-Homographie…",
-    "progress.splitting": "Zerlege die Szene in hochaufgelöste Regionen…",
-    "progress.region": "Analysiere Region {done}/{total} mit dem Bildmodell…",
-    "progress.merging": "Führe überlappende Regionen zusammen und entferne Duplikate…",
-    "progress.verifying": "Überprüfe Kandidat {done}/{total} in hoher Vergrößerung…",
+    "progress.initEngine": "Wird vorbereitet (beim ersten Mal dauert es etwas länger)…",
+    "progress.engineReady": "Bereit.",
+    "progress.aligning": "Die beiden Bilder werden ausgerichtet…",
+    "progress.splitting": "Bild wird in Ausschnitte zerlegt…",
+    "progress.region": "Analysiere Ausschnitt {done}/{total}…",
+    "progress.merging": "Ergebnisse werden zusammengeführt…",
+    "progress.verifying": "Überprüfe Veränderung {done}/{total}…",
 
-    "align.matched": "Ausgerichtet per Merkmalsabgleich ({n} Treffer)",
-    "align.fallback": "Ausrichtung auf einfache Skalierung zurückgefallen — Ergebnisse evtl. ungenauer",
+    "align.matched": "Bilder ausgerichtet ({n} gefundene Übereinstimmungen)",
+    "align.fallback": "Bilder konnten nicht präzise ausgerichtet werden — Ergebnisse evtl. ungenauer",
 
-    "note.pipeline":
-      "Die Ausrichtung läuft im Browser; die Kacheln werden serverseitig analysiert. Größere Szenen bedeuten mehr Regionen (und ein paar Sekunden mehr).",
+    "note.pipeline": "Größere Bilder benötigen etwas mehr Zeit.",
 
     "error.someFailed": "{failed} von {total} Regionen fehlgeschlagen — Ergebnisse evtl. unvollständig. Fehler: {err}",
     "error.allFailed": "{failed} von {total} Regionen fehlgeschlagen. Fehler: {err}",
@@ -346,6 +364,12 @@ export const STRINGS = {
     "search.clear": "Entfernen",
     "search.clearTip": "Suchgebiet entfernen und neu zeichnen.",
 
+    "options.heading": "Optionen",
+    "options.subheading": "Wonach und wo gesucht werden soll. Sinnvolle Standardwerte sind bereits ausgewählt.",
+    "options.wholeImage": "gesamtes Bild",
+    "options.tipExpand": "Optionen für Suchgebiet und Kategorien anzeigen",
+    "options.tipCollapse": "Optionen ausblenden",
+
     "category.heading": "Veränderungstyp-Kategorien",
     "category.subheading": "Voreinstellung wählen oder Kategorien einzeln auswählen. Spitzenaktualität und Grundaktualität sperren die Auswahl auf eine feste Kombination; Benutzerdefiniert ermöglicht freie Auswahl.",
     "preset.spitze": "Spitzenaktualität",
@@ -358,15 +382,17 @@ export const STRINGS = {
 
     "report.heading": "Veränderungsbericht ({n})",
     "report.headingOf": "Veränderungsbericht ({n} von {total})",
-    "report.export": "PDF exportieren",
-    "report.tipExport": "Professionellen PDF-Bericht mit annotierten Bildern und Veränderungstabelle herunterladen.",
-    "report.exportCsv": "CSV exportieren",
-    "report.tipExportCsv": "Sichtbare Veränderungen als CSV mit Koordinaten herunterladen.",
-    "report.exportGeoJson": "GeoJSON exportieren (QGIS)",
-    "report.tipExportGeoJson": "GeoJSON-Punktlayer (EPSG:4326) herunterladen, der sich direkt in QGIS öffnen lässt.",
+    "report.export": "Export",
+    "report.tipExport": "Ergebnisse als PDF-Bericht, CSV oder GeoJSON herunterladen.",
+    "report.exportPdf": "PDF-Bericht",
+    "report.tipExportPdf": "Professioneller PDF-Bericht mit annotierten Bildern und Veränderungstabelle.",
+    "report.exportCsv": "CSV",
+    "report.tipExportCsv": "Sichtbare Veränderungen als CSV mit Koordinaten.",
+    "report.exportGeoJson": "GeoJSON (QGIS)",
+    "report.tipExportGeoJson": "GeoJSON-Punktlayer (EPSG:4326), der sich direkt in QGIS öffnen lässt.",
     "report.needsGeoTiffForExport": "CSV- und GeoJSON-Export (mit Koordinaten) erfordern GeoTIFF-Eingabe — beide Bilder als GeoTIFF hochladen, um sie zu aktivieren.",
-    "report.exportMerkblatt": "Merkblatt exportieren (PDF)",
-    "report.tipExportMerkblatt": "Digitales Merkblatt für das eingeschränkte Suchgebiet herunterladen.",
+    "report.exportMerkblatt": "Digitales Merkblatt",
+    "report.tipExportMerkblatt": "Digitales Merkblatt für das eingeschränkte Suchgebiet.",
 
     "pdf.title": "Veränderungsbericht",
     "pdf.subtitle": "Orthophoto-Veränderungsanalyse",
@@ -415,10 +441,10 @@ export const STRINGS = {
     "cat.other": "Sonstiges",
 
     "how.heading": "So funktioniert es",
-    "how.1": "Beide Bilder werden im Browser per ORB-Merkmalsabgleich + RANSAC-Homographie überlagert.",
-    "how.2": "Das ausgerichtete Paar wird in überlappende, hochaufgelöste Kacheln plus einen Überblick zerlegt.",
-    "how.3": "Jede Region wird von einem Bildmodell analysiert, das echte bauliche / Nutzungs-Veränderungen erkennt (Jahreszeit, Licht und Schatten werden ignoriert).",
-    "how.4": "Treffer werden auf globale Koordinaten zurückgerechnet, dedupliziert, in hoher Vergrößerung nachgeprüft, hervorgehoben und aufgelistet.",
+    "how.1": "Wir richten beide Bilder automatisch präzise aufeinander aus.",
+    "how.2": "Das Bild wird in kleine Ausschnitte zerlegt, damit auch kleine Veränderungen erkannt werden.",
+    "how.3": "Eine KI vergleicht jeden Ausschnitt und erkennt echte Veränderungen — Jahreszeit, Licht und Schatten werden ignoriert.",
+    "how.4": "Jedes Ergebnis wird nochmals geprüft, hervorgehoben und übersichtlich zur Kontrolle aufgelistet.",
 
     "onboard.heading": "Erste Schritte",
     "onboard.subtitle": "Folgen Sie diesen Schritten, um zwei Orthophotos zu vergleichen.",

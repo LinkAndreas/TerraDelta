@@ -21,6 +21,7 @@ interface Props {
   pointSet: boolean;
   onChange: (patch: Partial<SearchArea>) => void;
   onClear: () => void;
+  disabled?: boolean;
 }
 
 type Source = "ref" | "target";
@@ -33,7 +34,17 @@ type DragState =
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
-export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, area, pointSet, onChange, onClear }: Props) {
+export default function SearchAreaMap({
+  refUrl,
+  targetUrl,
+  refGeo,
+  targetGeo,
+  area,
+  pointSet,
+  onChange,
+  onClear,
+  disabled = false,
+}: Props) {
   const { t } = useI18n();
   const [source, setSource] = useState<Source>("ref");
   const [drag, setDrag] = useState<DragState>(null);
@@ -53,6 +64,7 @@ export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, ar
   // image's aspect ratio — the SVG viewBox is stretched non-uniformly to
   // match the container, which would distort an SVG circle.
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = pointFromEvent(e);
     const role = (e.target as Element).closest?.("[data-role]")?.getAttribute("data-role");
@@ -69,7 +81,7 @@ export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, ar
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!drag) return;
+    if (!drag || disabled) return;
     const p = pointFromEvent(e);
     if (drag.mode === "draw") onChange(searchAreaFromDrag(geo, area.shape, drag.start, p));
     else if (drag.mode === "move") onChange(moveSearchArea(geo, p, drag.grabOffset));
@@ -128,7 +140,8 @@ export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, ar
           touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
-          cursor: pointSet ? "default" : "crosshair",
+          border: "1px solid var(--border)",
+          cursor: disabled ? "not-allowed" : pointSet ? "default" : "crosshair",
         }}
       >
         <img
@@ -136,20 +149,42 @@ export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, ar
           alt=""
           draggable={false}
           onDragStart={(e) => e.preventDefault()}
-          style={{ width: "100%", height: "auto", display: "block", userSelect: "none", WebkitUserDrag: "none" } as React.CSSProperties}
+          style={{
+            width: "100%",
+            height: "auto",
+            display: "block",
+            userSelect: "none",
+            WebkitUserDrag: "none",
+            opacity: disabled ? 0.75 : 1,
+            transition: "opacity 0.15s ease",
+          } as React.CSSProperties}
         />
 
         <svg
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "all" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: disabled ? "none" : "all" }}
         >
           {overlay && (
             <>
               {overlay.kind === "ellipse" ? (
-                <ellipse data-role="shape" cx={overlay.cx * 100} cy={overlay.cy * 100} rx={overlay.rx * 100} ry={overlay.ry * 100} style={{ ...shapeStyle, cursor: "move" }} />
+                <ellipse
+                  data-role="shape"
+                  cx={overlay.cx * 100}
+                  cy={overlay.cy * 100}
+                  rx={overlay.rx * 100}
+                  ry={overlay.ry * 100}
+                  style={{ ...shapeStyle, cursor: disabled ? "not-allowed" : "move" }}
+                />
               ) : (
-                <rect data-role="shape" x={overlay.x * 100} y={overlay.y * 100} width={overlay.w * 100} height={overlay.h * 100} style={{ ...shapeStyle, cursor: "move" }} />
+                <rect
+                  data-role="shape"
+                  x={overlay.x * 100}
+                  y={overlay.y * 100}
+                  width={overlay.w * 100}
+                  height={overlay.h * 100}
+                  style={{ ...shapeStyle, cursor: disabled ? "not-allowed" : "move" }}
+                />
               )}
 
               {(() => {
@@ -166,39 +201,52 @@ export default function SearchAreaMap({ refUrl, targetUrl, refGeo, targetGeo, ar
           )}
         </svg>
 
-        {handlePoints?.map(([hx, hy], i) => (
-          <div
-            key={i}
-            data-role="handle"
-            className="map-handle-hit"
-            style={{
-              left: `${hx * 100}%`,
-              top: `${hy * 100}%`,
-              cursor: area.shape === "circle" ? "ew-resize" : "nwse-resize",
-            }}
-          >
-            <span className="map-handle-dot" />
-          </div>
-        ))}
+        {!disabled &&
+          handlePoints?.map(([hx, hy], i) => (
+            <div
+              key={i}
+              data-role="handle"
+              className="map-handle-hit"
+              style={{
+                left: `${hx * 100}%`,
+                top: `${hy * 100}%`,
+                cursor: area.shape === "circle" ? "ew-resize" : "nwse-resize",
+              }}
+            >
+              <span className="map-handle-dot" />
+            </div>
+          ))}
 
-        {!pointSet && (
-          <div style={pointerNoneOverlay}>
-            <span style={hintPillStyle}>{t("search.drawHint")}</span>
+        {!disabled && !pointSet && (
+          <div className="map-hint-bar">
+            <span aria-hidden>✛</span>
+            {t("search.drawHint")}
           </div>
         )}
 
+        {pointSet && !disabled && (
+          <button type="button" onClick={onClear} title={t("search.clearTip")} className="map-clear-btn">
+            ✕ {t("search.clear")}
+          </button>
+        )}
+
         {pointSet && (
-          <>
-            <div style={pointerNoneOverlay}>
-              <span style={{ ...hintPillStyle, opacity: 0.85 }}>{t("search.dragMoveHint")}</span>
-            </div>
-            <span style={captionBadgeStyle}>
+          <div className="map-caption-bar">
+            <span className="map-caption-badge">
               {sizeCaption} · {coordCaption}
             </span>
-            <button type="button" onClick={onClear} title={t("search.clearTip")} style={clearButtonStyle}>
-              ✕ {t("search.clear")}
-            </button>
-          </>
+            {disabled ? (
+              <span className="map-caption-hint">🔒 {t("run.locked")}</span>
+            ) : (
+              <span className="map-caption-hint">{t("search.dragMoveHint")}</span>
+            )}
+          </div>
+        )}
+
+        {!pointSet && disabled && (
+          <div className="map-caption-bar" style={{ justifyContent: "center" }}>
+            <span className="map-caption-badge">🔒 {t("run.locked")}</span>
+          </div>
         )}
       </div>
     </div>
@@ -221,48 +269,4 @@ const crosshairStyle: React.CSSProperties = {
   strokeOpacity: 0.9,
   vectorEffect: "non-scaling-stroke",
   pointerEvents: "none",
-};
-
-const pointerNoneOverlay: React.CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  pointerEvents: "none",
-  padding: 16,
-  textAlign: "center",
-};
-
-const hintPillStyle: React.CSSProperties = {
-  fontSize: 12.5,
-  padding: "6px 12px",
-  borderRadius: 999,
-  background: "rgba(0,0,0,0.6)",
-  color: "#fff",
-};
-
-const captionBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  bottom: 8,
-  left: 8,
-  fontSize: 12,
-  padding: "3px 9px",
-  borderRadius: 6,
-  background: "rgba(0,0,0,0.6)",
-  color: "#fff",
-  pointerEvents: "none",
-};
-
-const clearButtonStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 8,
-  right: 8,
-  fontSize: 12,
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "rgba(0,0,0,0.6)",
-  border: "1px solid rgba(255,255,255,0.25)",
-  color: "#fff",
-  fontWeight: 500,
 };

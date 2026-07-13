@@ -10,7 +10,7 @@ import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildVerifyCrops, mapToGlobal, mapPolygonToGlobal, dedupe, type Tile } from "@/lib/tiles";
 import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
 import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
@@ -47,6 +47,7 @@ interface TaskResult {
   model: string;
   failed: boolean;
   error?: string;
+  status?: number;
 }
 
 export default function Home() {
@@ -70,15 +71,19 @@ export default function Home() {
   // each with its own dedicated UI section.
   const [searchAreaEnabled, setSearchAreaEnabled] = useState(false);
   const [searchArea, setSearchArea] = useState<SearchArea | null>(null);
-  const [categoryPreset, setCategoryPreset] = useState<CategoryPreset>("spitze");
+  const [categoryPreset, setCategoryPreset] = useState<CategoryPreset>("grund");
   const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(() =>
-    categoriesForPreset("spitze"),
+    categoriesForPreset("grund"),
   );
 
   const [stage, setStage] = useState<Stage>("idle");
   const [progressMsg, setProgressMsg] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Set when a request comes back 429 (rate limit / usage quota) — surfaced
+  // as its own alert (distinct from a generic failure) and reflected in the
+  // model status indicator, since it means the key is fine but throttled.
+  const [rateLimitAlert, setRateLimitAlert] = useState(false);
   const [align, setAlign] = useState<AlignResult | null>(null);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -101,6 +106,7 @@ export default function Home() {
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   const refreshModels = async () => {
     setIsFetchingModels(true);
@@ -172,6 +178,27 @@ export default function Home() {
     CATEGORIES.some((c) => selectedCategories[c]);
   const hasKey = !!keys[provider]?.trim();
   const providerShort = PROVIDERS[provider].label.split(" — ")[1] ?? PROVIDERS[provider].label;
+  // Single tri-state readout for "is the selected model usable right now",
+  // shared by the topbar and run-row indicators so they never disagree.
+  const modelStatus: "ready" | "noKey" | "limited" = rateLimitAlert ? "limited" : hasKey ? "ready" : "noKey";
+  const modelStatusColor = { ready: "#22c55e", noKey: "#f59e0b", limited: "#ef4444" }[modelStatus];
+  const modelStatusTip = t(
+    modelStatus === "limited" ? "settings.tipLimited" : modelStatus === "noKey" ? "run.needKey" : "settings.tipReady",
+  );
+
+  // One-line summary shown on the collapsed "Options" toggle, so the current
+  // settings are visible without expanding it.
+  const categorySummary =
+    categoryPreset === "custom"
+      ? `${t("preset.custom")} (${CATEGORIES.filter((c) => selectedCategories[c]).length})`
+      : t(categoryPreset === "grund" ? "preset.grund" : "preset.spitze");
+  const areaSummary =
+    searchAreaEnabled && hasValidPoint && searchArea
+      ? searchArea.shape === "circle"
+        ? `⌀ ${Math.round(searchArea.radiusM * 2)} m`
+        : `${Math.round(searchArea.widthM)} × ${Math.round(searchArea.heightM)} m`
+      : t("options.wholeImage");
+  const optionsSummary = `${categorySummary} · ${areaSummary}`;
 
   useEffect(() => {
     if (!busy) return;
@@ -195,6 +222,7 @@ export default function Home() {
   async function run() {
     if (!refUrl || !targetUrl) return;
     setError(null);
+    setRateLimitAlert(false);
     setResult(null);
     setSelectedId(null);
     startRef.current = Date.now();
@@ -256,10 +284,15 @@ export default function Home() {
               }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Analysis failed");
+            if (!res.ok) {
+              const err = new Error(data.error || "Analysis failed") as Error & { status?: number };
+              err.status = res.status;
+              throw err;
+            }
             const changes: Change[] = (data.changes ?? []).map((c: Change) => ({
               ...c,
               bbox: mapToGlobal(tile, c.bbox),
+              polygon: mapPolygonToGlobal(tile, c.polygon),
             }));
             return { changes, summary: data.summary ?? "", model: data.model ?? "", failed: false };
           } catch (e) {
@@ -269,11 +302,13 @@ export default function Home() {
               model: "",
               failed: true,
               error: e instanceof Error ? e.message : String(e),
+              status: (e as { status?: number })?.status,
             };
           }
         },
         onTaskDone,
       );
+      if (results.some((r) => r.status === 429)) setRateLimitAlert(true);
 
       setProgressMsg(t("progress.merging"));
       const merged = dedupe(results.flatMap((r) => r.changes));
@@ -313,13 +348,19 @@ export default function Home() {
                 }),
               });
               const data = await res.json();
-              if (!res.ok) throw new Error(data.error || "Verification failed");
+              if (!res.ok) {
+                if (res.status === 429) setRateLimitAlert(true);
+                throw new Error(data.error || "Verification failed");
+              }
               if (!data.genuine) return null;
               const refined = mapToGlobal(crops[i], data.bbox ?? [0, 0, 0, 0]);
+              const refinedOk = refined[2] > 0.001 && refined[3] > 0.001;
+              const refinedPolygon: [number, number][] = Array.isArray(data.polygon) ? data.polygon : [];
               return {
                 ...chg,
                 confidence: (data.confidence as Confidence) || chg.confidence,
-                bbox: refined[2] > 0.001 && refined[3] > 0.001 ? refined : chg.bbox,
+                bbox: refinedOk ? refined : chg.bbox,
+                polygon: refinedOk && refinedPolygon.length >= 3 ? mapPolygonToGlobal(crops[i], refinedPolygon) : chg.polygon,
               };
             } catch {
               return chg; // verification unavailable — keep the original detection
@@ -393,17 +434,13 @@ export default function Home() {
           <button
             className="icon-btn"
             onClick={() => setSettingsOpen(true)}
-            title={t("settings.tipOpen")}
+            title={modelStatusTip}
             aria-label={t("settings.heading")}
-            style={{ position: "relative" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}
           >
-            ⚙
-            {!hasKey && (
-              <span
-                className="status-dot"
-                style={{ position: "absolute", top: 4, right: 4, background: "#f59e0b" }}
-              />
-            )}
+            <span className="status-dot" style={{ background: modelStatusColor }} aria-hidden />
+            {providerShort} · {model}
+            <span aria-hidden style={{ opacity: 0.75 }}>⚙</span>
           </button>
           <button
             className="icon-btn"
@@ -453,6 +490,7 @@ export default function Home() {
             label={t("upload.earlier")}
             sublabel={t("upload.earlierSub")}
             url={refUrl}
+            disabled={busy}
             onFile={(dataUrl, meta) => {
               setRefUrl(dataUrl);
               setRefMeta(meta);
@@ -466,6 +504,7 @@ export default function Home() {
             label={t("upload.later")}
             sublabel={t("upload.laterSub")}
             url={targetUrl}
+            disabled={busy}
             onFile={(dataUrl, meta) => {
               setTargetUrl(dataUrl);
               setTargetMeta(meta);
@@ -483,40 +522,55 @@ export default function Home() {
           </div>
         )}
 
-        <SearchAreaSection
-          geoAvailable={geoAvailable}
-          enabled={searchAreaEnabled}
-          setEnabled={setSearchAreaEnabled}
-          searchArea={searchArea}
-          setSearchArea={setSearchArea}
-          refUrl={refUrl}
-          targetUrl={targetUrl}
-          refGeo={refMeta?.geo ?? null}
-          targetGeo={targetMeta?.geo ?? null}
-        />
+        <div style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            className="options-toggle"
+            aria-expanded={optionsOpen}
+            onClick={() => setOptionsOpen((v) => !v)}
+            title={t(optionsOpen ? "options.tipCollapse" : "options.tipExpand")}
+          >
+            <span className="row" style={{ gap: 10 }}>
+              <span className="options-toggle-chevron" aria-hidden>
+                ▸
+              </span>
+              {t("options.heading")}
+            </span>
+            <span className="muted" style={{ fontWeight: 500, fontSize: 13 }}>
+              {optionsSummary}
+            </span>
+          </button>
 
-        <CategorySection
-          preset={categoryPreset}
-          setPreset={setCategoryPreset}
-          selectedCategories={selectedCategories}
-          setSelectedCategories={setSelectedCategories}
-        />
+          {optionsOpen && (
+            <>
+              <SearchAreaSection
+                geoAvailable={geoAvailable}
+                enabled={searchAreaEnabled}
+                setEnabled={setSearchAreaEnabled}
+                searchArea={searchArea}
+                setSearchArea={setSearchArea}
+                refUrl={refUrl}
+                targetUrl={targetUrl}
+                refGeo={refMeta?.geo ?? null}
+                targetGeo={targetMeta?.geo ?? null}
+                disabled={busy}
+              />
+
+              <CategorySection
+                preset={categoryPreset}
+                setPreset={setCategoryPreset}
+                selectedCategories={selectedCategories}
+                setSelectedCategories={setSelectedCategories}
+                disabled={busy}
+              />
+            </>
+          )}
+        </div>
 
         <div className="row" style={{ gap: 12, marginTop: 14, flexWrap: "wrap" }}>
           <button onClick={run} disabled={!canRun} title={t("run.tip")}>
             {busy && <span className="spinner" />}
             {t(STAGE_KEY[stage])}
-          </button>
-          <button
-            className="chip-btn"
-            onClick={() => setSettingsOpen(true)}
-            title={t("settings.tipOpen")}
-          >
-            <span
-              className="status-dot"
-              style={{ background: hasKey ? "#22c55e" : "#f59e0b" }}
-            />
-            {providerShort} · {model}
           </button>
           {align && stage === "idle" && (
             <span className="pill">
@@ -526,16 +580,6 @@ export default function Home() {
             </span>
           )}
         </div>
-
-        {!hasKey && (
-          <button
-            className="link-hint"
-            onClick={() => setSettingsOpen(true)}
-            style={{ marginTop: 10 }}
-          >
-            ⚠ {t("run.needKey")}
-          </button>
-        )}
 
         <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
           {t("note.pipeline")}
@@ -552,6 +596,16 @@ export default function Home() {
               <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
                 {elapsed.toFixed(1)}s
               </span>
+            </div>
+          </div>
+        )}
+
+        {rateLimitAlert && (
+          <div className="alert" style={{ marginTop: 12 }}>
+            <span className="alert-icon" aria-hidden>⚠</span>
+            <div>
+              <strong>{t("alert.rateLimit.heading")}</strong>
+              <p style={{ margin: "4px 0 0" }}>{t("alert.rateLimit.body")}</p>
             </div>
           </div>
         )}

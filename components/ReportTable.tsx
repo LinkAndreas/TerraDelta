@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CHANGE_COLORS, confLabel, type Change, type ChangeType, type Confidence, type GeoRef, type SearchArea } from "@/lib/types";
 import { useI18n, type StringKey } from "@/lib/i18n";
 
@@ -43,6 +43,8 @@ export default function ReportTable({
 }: Props) {
   const { t, lang } = useI18n();
   const [exporting, setExporting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const counts: Record<ChangeType, number> = { added: 0, removed: 0, modified: 0 };
   for (const c of changes) counts[c.change_type]++;
 
@@ -51,8 +53,18 @@ export default function ReportTable({
     .filter(({ c }) => visibleIds.has(c.id));
   const visibleChanges = rows.map(({ c }) => c);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [menuOpen]);
+
   async function handleExportPdf() {
     if (!refUrl || !targetUrl || exporting) return;
+    setMenuOpen(false);
     setExporting(true);
     try {
       const { exportPdf } = await import("@/lib/pdf");
@@ -64,18 +76,21 @@ export default function ReportTable({
 
   async function handleExportCsv() {
     if (!refGeo) return;
+    setMenuOpen(false);
     const { exportCsv } = await import("@/lib/exportData");
     exportCsv(visibleChanges, refGeo);
   }
 
   async function handleExportGeoJson() {
     if (!refGeo) return;
+    setMenuOpen(false);
     const { exportGeoJson } = await import("@/lib/exportData");
     exportGeoJson(visibleChanges, refGeo);
   }
 
   async function handleExportMerkblatt() {
     if (!refUrl || !targetUrl || !refGeo || !merkblattArea || exporting) return;
+    setMenuOpen(false);
     setExporting(true);
     try {
       const { exportMerkblatt } = await import("@/lib/pdf");
@@ -99,43 +114,42 @@ export default function ReportTable({
             ? t("report.headingOf", { n: rows.length, total: changes.length })
             : t("report.heading", { n: changes.length })}
         </strong>
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <div className="dropdown-wrap" ref={menuRef}>
           <button
             className="btn-secondary"
-            onClick={handleExportPdf}
-            disabled={!refUrl || !targetUrl || exporting}
+            onClick={() => setMenuOpen((v) => !v)}
+            disabled={exporting}
             title={t("report.tipExport")}
+            aria-expanded={menuOpen}
           >
-            {exporting ? <><span className="spinner" /> Generating…</> : t("report.export")}
+            {exporting ? (
+              <>
+                <span className="spinner" /> Generating…
+              </>
+            ) : (
+              <>{t("report.export")} ▾</>
+            )}
           </button>
-          {refGeo && (
-            <button className="btn-secondary" onClick={handleExportCsv} title={t("report.tipExportCsv")}>
-              {t("report.exportCsv")}
-            </button>
-          )}
-          {refGeo && (
-            <button className="btn-secondary" onClick={handleExportGeoJson} title={t("report.tipExportGeoJson")}>
-              {t("report.exportGeoJson")}
-            </button>
-          )}
-          {merkblattArea && refGeo && (
-            <button
-              className="btn-secondary"
-              onClick={handleExportMerkblatt}
-              disabled={exporting}
-              title={t("report.tipExportMerkblatt")}
-            >
-              {t("report.exportMerkblatt")}
-            </button>
+          {menuOpen && (
+            <div className="dropdown-menu">
+              <button className="dropdown-item" onClick={handleExportPdf} disabled={!refUrl || !targetUrl} title={t("report.tipExportPdf")}>
+                {t("report.exportPdf")}
+              </button>
+              <button className="dropdown-item" onClick={handleExportCsv} disabled={!refGeo} title={refGeo ? t("report.tipExportCsv") : t("report.needsGeoTiffForExport")}>
+                {t("report.exportCsv")}
+              </button>
+              <button className="dropdown-item" onClick={handleExportGeoJson} disabled={!refGeo} title={refGeo ? t("report.tipExportGeoJson") : t("report.needsGeoTiffForExport")}>
+                {t("report.exportGeoJson")}
+              </button>
+              {merkblattArea && refGeo && (
+                <button className="dropdown-item" onClick={handleExportMerkblatt} title={t("report.tipExportMerkblatt")}>
+                  {t("report.exportMerkblatt")}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
-
-      {!refGeo && (
-        <div className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 14 }}>
-          {t("report.needsGeoTiffForExport")}
-        </div>
-      )}
 
       <div className="row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         {TYPES.map((tp) => (

@@ -114,12 +114,9 @@ export default function CompareView({
                 <mask id={maskId}>
                   <rect x="0" y="0" width="100" height="100" fill="white" />
                   {shown.map(({ c }) => (
-                    <rect
+                    <polygon
                       key={c.id}
-                      x={c.bbox[0] * 100}
-                      y={c.bbox[1] * 100}
-                      width={c.bbox[2] * 100}
-                      height={c.bbox[3] * 100}
+                      points={c.polygon.map(([px, py]) => `${px * 100},${py * 100}`).join(" ")}
                       fill="black"
                     />
                   ))}
@@ -130,16 +127,13 @@ export default function CompareView({
           )}
           {showBoxes &&
             shown.map(({ c }) => {
-              const [x, y, w, h] = c.bbox;
               const color = CHANGE_COLORS[c.change_type];
               const isSel = c.id === selectedId;
+              const points = c.polygon.map(([px, py]) => `${px * 100},${py * 100}`).join(" ");
               return (
                 <g key={c.id} style={{ cursor: "pointer" }} onClick={() => onSelect(isSel ? null : c.id)}>
-                  <rect
-                    x={x * 100}
-                    y={y * 100}
-                    width={w * 100}
-                    height={h * 100}
+                  <polygon
+                    points={points}
                     fill={isSel ? color : "transparent"}
                     fillOpacity={isSel ? 0.16 : 0}
                     stroke="#000"
@@ -147,11 +141,8 @@ export default function CompareView({
                     strokeWidth={isSel ? 5 : 4}
                     vectorEffect="non-scaling-stroke"
                   />
-                  <rect
-                    x={x * 100}
-                    y={y * 100}
-                    width={w * 100}
-                    height={h * 100}
+                  <polygon
+                    points={points}
                     fill="none"
                     stroke={color}
                     strokeWidth={isSel ? 3 : 2}

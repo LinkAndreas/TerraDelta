@@ -171,6 +171,10 @@ export function mapToGlobal(
   return [gx, gy, gw, gh];
 }
 
+export function mapPolygonToGlobal(tile: Tile, polygon: [number, number][]): [number, number][] {
+  return polygon.map(([x, y]) => [clamp01(tile.gx + x * tile.gw), clamp01(tile.gy + y * tile.gh)]);
+}
+
 function area(b: [number, number, number, number]) {
   return b[2] * b[3];
 }
