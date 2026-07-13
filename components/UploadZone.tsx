@@ -178,7 +178,6 @@ export default function UploadZone({ label, sublabel, url, onFile, disabled = fa
         border: `2px dashed ${drag && !busy ? "var(--accent)" : "var(--border)"}`,
         borderRadius: 10,
         cursor: busy ? "not-allowed" : "pointer",
-        overflow: "hidden",
         position: "relative",
         background: drag && !busy ? "var(--accent-soft)" : "var(--card)",
         opacity: disabled ? 0.6 : 1,
@@ -197,11 +196,9 @@ export default function UploadZone({ label, sublabel, url, onFile, disabled = fa
         </div>
       ) : url ? (
         <>
-          <img
-            src={url}
-            alt={label}
-            style={{ width: "100%", height: "100%", objectFit: "cover", maxHeight: 220 }}
-          />
+          <div style={{ width: "100%", height: "100%", maxHeight: 220, overflow: "hidden", borderRadius: 10 }}>
+            <img src={url} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
           <span
             style={{
               position: "absolute",

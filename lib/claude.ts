@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORIES, type AnalyzeResult, type SupportedModels, type VerifyResult } from "./types";
+import { CATEGORIES, type AnalyzeResult, type SupportedModels, type TokenUsage, type VerifyResult } from "./types";
 import {
   SYSTEM,
   VERIFY_SYSTEM,
@@ -27,21 +27,25 @@ const SCHEMA = {
           change_type: { type: "string", enum: ["added", "removed", "modified"] },
           description: { type: "string" },
           confidence: { type: "string", enum: ["low", "medium", "high"] },
-          bbox: { type: "array", items: { type: "number" }, description: "[x, y, width, height], normalized 0..1." },
-          polygon: {
+          bbox: {
             type: "array",
-            items: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
-            minItems: 3,
-            maxItems: 12,
-            description: "Vertices tracing the changed object's actual outline, normalized 0..1. Repeat the bbox's four corners if unsure.",
+            items: { type: "number" },
+            description: "[x, y, width, height], normalized 0..1, a TIGHT box hugging the changed object.",
           },
         },
-        required: ["category", "change_type", "description", "confidence", "bbox", "polygon"],
+        required: ["category", "change_type", "description", "confidence", "bbox"],
       },
     },
   },
   required: ["analysis", "summary", "changes"],
 };
+
+// The SDK's Usage type has several cache-related fields we don't use (this
+// app never sets cache_control) — pull out just the two that matter for a
+// plain per-call token count.
+function tokenUsage(usage: { input_tokens?: number; output_tokens?: number } | undefined | null): TokenUsage {
+  return { inputTokens: usage?.input_tokens ?? 0, outputTokens: usage?.output_tokens ?? 0 };
+}
 
 export async function anthropicDetect(
   referenceDataUrl: string,
@@ -89,6 +93,7 @@ export async function anthropicDetect(
     | { text?: string }
     | undefined;
   const raw = (textBlock?.text ?? "").trim();
+  const usage = tokenUsage(response.usage);
 
   let parsed: { summary?: string; changes?: [] };
   try {
@@ -96,7 +101,7 @@ export async function anthropicDetect(
   } catch {
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
-  return buildResult(parsed, opts.model);
+  return buildResult(parsed, opts.model, usage);
 }
 
 const VERIFY_SCHEMA = {
@@ -105,15 +110,14 @@ const VERIFY_SCHEMA = {
   properties: {
     genuine: { type: "boolean" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
-    bbox: { type: "array", items: { type: "number" } },
-    polygon: {
+    bbox: {
       type: "array",
-      items: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
-      description: "Vertices tracing the object's actual outline in this crop, normalized 0..1. Empty if rejected.",
+      items: { type: "number" },
+      description: "TIGHT box hugging the object in this crop, normalized 0..1. [0,0,0,0] if rejected.",
     },
     reason: { type: "string" },
   },
-  required: ["genuine", "confidence", "bbox", "polygon", "reason"],
+  required: ["genuine", "confidence", "bbox", "reason"],
 };
 
 export async function anthropicVerify(
@@ -169,6 +173,7 @@ export async function anthropicVerify(
     | { text?: string }
     | undefined;
   const raw = (textBlock?.text ?? "").trim();
+  const usage = tokenUsage(response.usage);
 
   let parsed: Parameters<typeof buildVerifyResult>[0];
   try {
@@ -176,7 +181,7 @@ export async function anthropicVerify(
   } catch {
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
-  return buildVerifyResult(parsed);
+  return buildVerifyResult(parsed, usage);
 }
 
 export async function fetchModels(

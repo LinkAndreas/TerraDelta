@@ -10,9 +10,9 @@ import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, buildVerifyCrops, mapToGlobal, mapPolygonToGlobal, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
 import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
-import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
+import { PROVIDER_KEYS, PROVIDERS, estimateCostUsd, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
@@ -26,6 +26,7 @@ import {
   type Confidence,
   type SearchArea,
   type SupportedModels,
+  type TokenUsage,
 } from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
@@ -41,6 +42,12 @@ const STAGE_KEY: Record<Stage, StringKey> = {
 
 const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
+// Most runs land well under $1 — show extra precision there so a cheap run
+// doesn't just read as a misleading "$0.00".
+function formatCostUsd(usd: number): string {
+  return usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2);
+}
+
 interface TaskResult {
   changes: Change[];
   summary: string;
@@ -48,6 +55,7 @@ interface TaskResult {
   failed: boolean;
   error?: string;
   status?: number;
+  usage?: TokenUsage;
 }
 
 export default function Home() {
@@ -292,9 +300,8 @@ export default function Home() {
             const changes: Change[] = (data.changes ?? []).map((c: Change) => ({
               ...c,
               bbox: mapToGlobal(tile, c.bbox),
-              polygon: mapPolygonToGlobal(tile, c.polygon),
             }));
-            return { changes, summary: data.summary ?? "", model: data.model ?? "", failed: false };
+            return { changes, summary: data.summary ?? "", model: data.model ?? "", failed: false, usage: data.usage };
           } catch (e) {
             return {
               changes: [],
@@ -311,12 +318,23 @@ export default function Home() {
       if (results.some((r) => r.status === 429)) setRateLimitAlert(true);
 
       setProgressMsg(t("progress.merging"));
-      const merged = dedupe(results.flatMap((r) => r.changes));
+      // §5.0/§5.4: keep only the selected change-type categories, and (in
+      // restricted-search mode) only changes whose center actually falls
+      // inside the requested search area — tile-overlap pruning above is
+      // loose (a tile can overlap the area at just one corner), so a
+      // detection anywhere in that tile can still land outside it. Filtering
+      // here, before the costly per-candidate verification pass below, means
+      // we never pay for an extra API call confirming a change we're about
+      // to discard anyway.
+      const merged = dedupe(results.flatMap((r) => r.changes))
+        .filter((c) => selectedCategories[c.category as Category] ?? true)
+        .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c));
 
       // Second pass: re-examine every candidate on a zoomed-in crop so false
       // positives (lighting/season artifacts) are dropped and boxes tightened.
       // The detection pass is tuned for recall; this pass restores precision.
       let confirmed = merged;
+      const verifyUsages: TokenUsage[] = [];
       if (merged.length > 0) {
         setProgressMsg(t("progress.verifying", { done: 0, total: merged.length }));
         const crops = await buildVerifyCrops(
@@ -352,15 +370,15 @@ export default function Home() {
                 if (res.status === 429) setRateLimitAlert(true);
                 throw new Error(data.error || "Verification failed");
               }
+              // Record spend even for a rejected candidate — the call still cost tokens.
+              if (data.usage) verifyUsages.push(data.usage);
               if (!data.genuine) return null;
               const refined = mapToGlobal(crops[i], data.bbox ?? [0, 0, 0, 0]);
               const refinedOk = refined[2] > 0.001 && refined[3] > 0.001;
-              const refinedPolygon: [number, number][] = Array.isArray(data.polygon) ? data.polygon : [];
               return {
                 ...chg,
                 confidence: (data.confidence as Confidence) || chg.confidence,
                 bbox: refinedOk ? refined : chg.bbox,
-                polygon: refinedOk && refinedPolygon.length >= 3 ? mapPolygonToGlobal(crops[i], refinedPolygon) : chg.polygon,
               };
             } catch {
               return chg; // verification unavailable — keep the original detection
@@ -376,12 +394,10 @@ export default function Home() {
           .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
       }
 
-      // §5.0/§5.4: keep only the selected change-type categories, and (in
-      // restricted-search mode) only changes whose center actually falls
-      // inside the requested search area — tiles overlap it loosely, so a
-      // detection near a tile edge can still sit just outside the area.
+      // Re-apply the same area check post-verification: the crop-based pass
+      // above can tighten/shift a candidate's bbox, so one that started out
+      // inside the search area could refine to just outside it.
       const filtered = confirmed
-        .filter((c) => selectedCategories[c.category as Category] ?? true)
         .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c))
         .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
 
@@ -391,7 +407,18 @@ export default function Home() {
         `${filtered.length} change${filtered.length === 1 ? "" : "s"} detected across ${tasks.length} regions.`;
       const usedModel = results.map((r) => r.model).find(Boolean) || "";
 
-      setResult({ changes: filtered, summary, model: usedModel });
+      // Total spend across both passes: every detect call (one per tile) plus
+      // every verify call (one per candidate) — regardless of whether that
+      // candidate was ultimately confirmed, since a rejected one still cost tokens.
+      const totalUsage = [...results.map((r) => r.usage), ...verifyUsages].reduce<TokenUsage>(
+        (acc, u) => ({
+          inputTokens: acc.inputTokens + (u?.inputTokens ?? 0),
+          outputTokens: acc.outputTokens + (u?.outputTokens ?? 0),
+        }),
+        { inputTokens: 0, outputTokens: 0 },
+      );
+
+      setResult({ changes: filtered, summary, model: usedModel, usage: totalUsage });
       if (failed > 0) {
         const firstErr = results.find((r) => r.failed)?.error || "unknown error";
         const allFailed = failed === tasks.length;
@@ -623,9 +650,19 @@ export default function Home() {
             <div className="card" style={{ marginBottom: 16 }}>
               <strong>{t("summary.heading")}</strong>
               <p style={{ margin: "6px 0 0" }}>{result.summary}</p>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {t("summary.meta", { n: result.changes.length, model: result.model })}
-              </span>
+              <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {t("summary.meta", { n: result.changes.length, model: result.model })}
+                </span>
+                {(result.usage.inputTokens > 0 || result.usage.outputTokens > 0) && (
+                  <span className="muted" style={{ fontSize: 12 }} title={t("summary.cost.tip")}>
+                    {t("summary.cost", {
+                      cost: formatCostUsd(estimateCostUsd(result.model, result.usage)),
+                      tokens: (result.usage.inputTokens + result.usage.outputTokens).toLocaleString(),
+                    })}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 

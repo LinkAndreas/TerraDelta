@@ -179,6 +179,7 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 input[type="number"] {
   -moz-appearance: textfield;
 }
@@ -816,15 +817,15 @@ select.lang {
   transition: transform 0.15s ease;
 }
 
-.switch input:checked + .switch-track {
+.switch input:checked+.switch-track {
   background: var(--accent);
 }
 
-.switch input:checked + .switch-track .switch-thumb {
+.switch input:checked+.switch-track .switch-thumb {
   transform: translateX(17px);
 }
 
-.switch input:disabled + .switch-track {
+.switch input:disabled+.switch-track {
   opacity: 0.45;
 }
 
@@ -853,10 +854,12 @@ select.lang {
 }
 
 @keyframes pulse-stroke {
+
   0%,
   100% {
     stroke-opacity: 1;
   }
+
   50% {
     stroke-opacity: 0.35;
   }
@@ -886,6 +889,7 @@ select.lang {
   0% {
     left: -40%;
   }
+
   100% {
     left: 100%;
   }
@@ -942,40 +946,51 @@ select.lang {
   .container {
     padding: 16px 14px 60px;
   }
+
   .topbar {
     flex-direction: column;
     gap: 16px;
   }
+
   .card {
     padding: 16px;
   }
+
   .wordmark {
     font-size: 28px;
   }
+
   h1 {
     font-size: 26px;
   }
+
   h2 {
     font-size: 20px;
   }
+
   .footer {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .modal-panel {
     max-width: 100%;
     margin: 0;
   }
+
   .modal-backdrop {
     padding: 16px;
   }
+
   .onboard-step {
     flex-direction: column;
     gap: 8px;
   }
+
   .icon-btn {
     padding: 10px 14px;
   }
+
   /* Full-width only for standalone action buttons (run button, modal "Done",
      dropdown items, …) — excludes buttons meant to sit inline/compact:
      segmented controls, preset chips, and icon/secondary buttons paired with
@@ -986,18 +1001,49 @@ select.lang {
   button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn) {
     width: 100%;
   }
+
+  /* Three-way preset labels ("Grundaktualität" / "Spitzenaktualität" /
+     "Benutzerdefiniert") don't fit shoulder-to-shoulder on narrow screens
+     without clipping mid-word — stack them into full-width rows instead. */
   .segmented {
     width: 100%;
+    flex-direction: column;
   }
+
   .segmented button {
     flex: 1;
+    width: 100%;
+    text-align: left;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
+
+  .segmented button:last-child {
+    border-bottom: none;
+  }
+
   .topbar .row {
     width: 100%;
+    flex-wrap: wrap;
   }
-  .topbar .row button, .topbar .row select {
-    flex: 1;
+
+  .topbar .row button,
+  .topbar .row select {
+    flex: 1 1 auto;
+    min-width: 0;
   }
+
+  /* The settings button's label carries the current provider/model name,
+     which can be long enough to force the rest of the row past the
+     viewport edge (e.g. "Claude · claude-sonnet-5"). Give it the full
+     row to itself and ellipsis-truncate as a safety net, leaving the
+     three short, fixed-length controls to share the line below. */
+  .topbar .row > button:first-child {
+    flex-basis: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .field-select {
     min-width: auto;
     width: 100%;

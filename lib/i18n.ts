@@ -96,6 +96,8 @@ export const STRINGS = {
 
     "summary.heading": "Summary",
     "summary.meta": "{n} changes · model: {model}",
+    "summary.cost": "~${cost} est. API cost · {tokens} tokens",
+    "summary.cost.tip": "Estimated from token usage and this model's published pricing — not an exact bill.",
 
     "compare.heading": "Visual comparison",
     "compare.overlays": "Overlays",
@@ -338,6 +340,8 @@ export const STRINGS = {
 
     "summary.heading": "Zusammenfassung",
     "summary.meta": "{n} Veränderungen · Modell: {model}",
+    "summary.cost": "~{cost} $ geschätzte API-Kosten · {tokens} Tokens",
+    "summary.cost.tip": "Geschätzt aus dem Token-Verbrauch und der veröffentlichten Preisliste dieses Modells — keine exakte Abrechnung.",
 
     "compare.heading": "Visueller Vergleich",
     "compare.overlays": "Markierungen",
