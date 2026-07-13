@@ -682,29 +682,6 @@ select.lang {
   text-overflow: ellipsis;
 }
 
-.map-clear-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: #fff;
-  backdrop-filter: blur(3px);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.map-clear-btn:hover {
-  background: rgba(0, 0, 0, 0.75);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
 /* Locked (read-only) state while an analysis is running: dim + block
    interaction, but keep everything legible rather than hiding it. */
 .locked-surface {
@@ -999,8 +976,21 @@ select.lang {
   .icon-btn {
     padding: 10px 14px;
   }
-  button {
+  /* Full-width only for standalone action buttons (run button, modal "Done",
+     dropdown items, …) — excludes buttons meant to sit inline/compact:
+     segmented controls, preset chips, and icon/secondary buttons paired with
+     a label or input in the same row. Without these exclusions every button
+     in a segmented group (e.g. the category preset tabs) stretched to 100%
+     of its own width inside an inline-flex row, blowing the row way past
+     the viewport and forcing horizontal scroll. */
+  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn) {
     width: 100%;
+  }
+  .segmented {
+    width: 100%;
+  }
+  .segmented button {
+    flex: 1;
   }
   .topbar .row {
     width: 100%;

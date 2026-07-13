@@ -81,14 +81,15 @@ export interface GeoRef {
 
 // ── Search-area restriction (requires GeoTIFF input for both images) ──────
 
-export type SearchShape = "circle" | "rectangle";
+export type SearchShape = "circle" | "rectangle" | "square";
 
 export interface SearchArea {
   shape: SearchShape;
   lat: number;
   lon: number;
-  // Circle: radiusM. Rectangle: widthM x heightM (a square is just a
-  // rectangle with widthM === heightM).
+  // Circle: radiusM. Rectangle: widthM x heightM. Square: widthM === heightM
+  // (kept as a distinct shape so the UI can offer a single "side length"
+  // field instead of independent width/height).
   radiusM: number;
   widthM: number;
   heightM: number;

@@ -444,7 +444,7 @@ export default function Home() {
           </button>
           <button
             className="icon-btn"
-            onClick={() => setShowGuide(true)}
+            onClick={() => setShowGuide((v) => !v)}
             title={t("onboard.tipReopen")}
             style={{ fontSize: 14.5, fontWeight: 600 }}
           >

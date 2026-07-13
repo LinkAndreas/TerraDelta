@@ -100,6 +100,27 @@ export function metersBetween(lat1: number, lon1: number, lat2: number, lon2: nu
   return Math.hypot(dx, dy);
 }
 
+export interface GeoBounds {
+  minLon: number;
+  minLat: number;
+  maxLon: number;
+  maxLat: number;
+  widthM: number;
+  heightM: number;
+  areaKm2: number;
+}
+
+// WGS84 bounding box + real-world footprint of a whole GeoTIFF, for display
+// in the upload metadata panel (§ image info dropdown). Reuses the same
+// north-up-raster assumption as the rest of this file.
+export function geoRefBounds(geo: GeoRef): GeoBounds {
+  const [minLon, maxLat] = normalizedToLonLat(geo, 0, 0);
+  const [maxLon, minLat] = normalizedToLonLat(geo, 1, 1);
+  const widthM = metersBetween(maxLat, minLon, maxLat, maxLon);
+  const heightM = metersBetween(maxLat, minLon, minLat, minLon);
+  return { minLon, minLat, maxLon, maxLat, widthM, heightM, areaKm2: (widthM * heightM) / 1e6 };
+}
+
 export function isPointInSearchArea(area: SearchArea, lon: number, lat: number): boolean {
   const { dx, dy } = localMetersOffset(area.lat, area.lon, lat, lon);
   if (area.shape === "circle") return Math.hypot(dx, dy) <= area.radiusM;
@@ -154,8 +175,9 @@ export function roundCoord(n: number): number {
 }
 
 // New shape from a click-drag: for a circle, `from` is the center and `to`
-// is a point on the edge (radius = distance between them); for a rectangle,
-// `from`/`to` are opposite corners.
+// is a point on the edge (radius = distance between them); for a rectangle
+// or square, `from`/`to` are opposite corners (a square takes the larger of
+// the two dragged extents so it never shrinks to fit inside the drag box).
 export function searchAreaFromDrag(
   geo: GeoRef,
   shape: SearchShape,
@@ -174,8 +196,11 @@ export function searchAreaFromDrag(
   const [lon, lat] = normalizedToLonLat(geo, cnx, cny);
   const [xLon] = normalizedToLonLat(geo, Math.max(from.nx, to.nx), cny);
   const [, yLat] = normalizedToLonLat(geo, cnx, Math.min(from.ny, to.ny));
-  const widthM = Math.max(1, metersBetween(lat, lon, lat, xLon) * 2);
-  const heightM = Math.max(1, metersBetween(lat, lon, yLat, lon) * 2);
+  let widthM = Math.max(1, metersBetween(lat, lon, lat, xLon) * 2);
+  let heightM = Math.max(1, metersBetween(lat, lon, yLat, lon) * 2);
+  if (shape === "square") {
+    widthM = heightM = Math.max(widthM, heightM);
+  }
   return { shape, lat: roundCoord(lat), lon: roundCoord(lon), radiusM: widthM / 2, widthM, heightM };
 }
 
@@ -207,8 +232,11 @@ export function resizeSearchArea(
   }
   const dx = metersBetween(area.lat, area.lon, area.lat, hLon);
   const dy = metersBetween(area.lat, area.lon, hLat, area.lon);
-  const widthM = Math.max(1, dx * 2);
-  const heightM = Math.max(1, dy * 2);
+  let widthM = Math.max(1, dx * 2);
+  let heightM = Math.max(1, dy * 2);
+  if (area.shape === "square") {
+    widthM = heightM = Math.max(widthM, heightM);
+  }
   return { radiusM: widthM / 2, widthM, heightM };
 }
 
