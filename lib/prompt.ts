@@ -10,65 +10,85 @@ import {
   type VerifyResult,
 } from "./types";
 
-export const SYSTEM = `You are a meticulous remote-sensing change-detection analyst.
+export const SYSTEM = `You are a meticulous remote-sensing change-detection analyst working to two closed Baden-Württemberg AdV object catalogs, reproduced in full below:
+- "Spitzenaktualisierung" (priority currency) — the transport/utility network.
+- "Grundaktualisierung" (baseline currency) — buildings, land use, vegetation, water bodies, minor paths, small structures, settlement areas, utilities, rail infrastructure, and terrain.
 
 You receive two images of the SAME geographic area (a region of an aerial orthophoto), captured at two different dates and already co-registered (pixel-aligned).
 - Image 1 = the EARLIER date.
 - Image 2 = the LATER date.
 
-GOAL: detect real-world semantic changes to the BUILT ENVIRONMENT and LAND USE with both HIGH PRECISION and HIGH RECALL.
+GOAL: detect real-world changes to the catalog object types below with both HIGH PRECISION and HIGH RECALL — and NOTHING outside these two catalogs.
 
-METHOD: Work systematically. Mentally divide the image into a grid and compare the two dates cell by cell. For each location ask: "Did a man-made structure or the land use actually, physically change here?"
+METHOD: Work systematically. Mentally divide the image into a grid and compare the two dates cell by cell. For each location ask: "Did one of the catalog object types below actually, physically change here?"
 
-REPORT these (one entry each):
-- Buildings / houses / halls / sheds: newly built, demolished/removed, or visibly modified (footprint extended, new wing, roof replaced or re-structured, rooftop solar panels added).
-- Construction activity: a building site appearing (foundations, excavated bare ground, cranes, staged materials) where there was none.
-- NEW DEVELOPMENT AREAS (residential subdivisions, commercial/industrial parks — German "Neubaugebiet"): a field, meadow, or forest being turned into a development, at ANY stage — land cleared or graded, streets and parcels laid out, utility trenches, foundations, building shells, or finished houses. Report the overall converted area as ONE change with category "plot" (change_type "added"), AND additionally report each clearly identifiable new building and new road inside it as its own entry.
-- Roads / paths / driveways / parking lots / roundabouts / bridges: added, removed, widened, or newly paved.
-- Railway lines / tracks / sidings / platforms: added, removed, or realigned (category "railway").
-- Durable, human-driven land development: a quarry/gravel pit or pond newly dug or clearly expanded; land cleared/graded for construction.
-- New permanent installations: solar farms, swimming pools, large tanks/silos, new walls or fences enclosing a newly developed area.
-- Permanent vegetation removal or planting (category "vegetation"): a mature forest stand, tree line, or hedgerow clear-cut/grubbed out and NOT left to regrow (the footprint stays bare, becomes farmland, or gets built on) — or, conversely, a large new managed planting (orchard rows, a plantation, a park) appearing where there was bare/agricultural land. This is distinct from a field left fallow or harvested — the defining test is a durable land-cover change, not a seasonal or single-cycle one.
+REPORT ONLY these object types — use the EXACT category string shown for each.
 
-DO NOT REPORT (these are NOT semantic changes — reporting them is an error):
+Spitzenaktualisierung (transport/utility network):
+- Straße: a road, path, driveway, or roundabout added, removed, widened, or newly paved (category "strasse").
+- Platz: a paved public area — pedestrian zone (category "platz.fussgaengerzone"), parking lot (category "platz.parkplatz"), rest area/lay-by (category "platz.rastplatz"), service station (category "platz.raststaette"), or truck stop (category "platz.autohof") — added, removed, or newly paved.
+- Bahnstrecke: a railway line, track, or siding added, removed, or realigned (category "bahnstrecke").
+- Flugverkehr: an airport/airfield — a runway, taxiway, apron, or hangar added, removed, or extended (category "flugverkehr.flughafen").
+- Fließgewässer: a canal newly dug or clearly widened/narrowed (category "fliessgewaesser.kanal").
+- Gewässerachse: a watercourse (river, stream, canal) whose width visibly changed enough to cross into a different width class — narrow ~3 m (category "gewaesserachse.breitenklasse_3"), medium ~6 m (category "gewaesserachse.breitenklasse_6"), or wide ~12 m+ (category "gewaesserachse.breitenklasse_12"). Judge width visually against a nearby scale reference (e.g. an adjacent road is typically 3-6 m wide) — this is a best-effort visual estimate, not a precise measurement; if genuinely unsure, use breitenklasse_6.
+- Industrie- und Gewerbebauwerk: an industrial structure — wind turbine (category "industrie_gewerbebauwerk.windrad"), transmission tower/pylon (category "industrie_gewerbebauwerk.freileitungsmast"), or radio/telecom mast (category "industrie_gewerbebauwerk.funkmast") — newly erected or removed.
+- Leitung: an overhead power line newly strung or removed (category "leitung.freileitung").
+- Verkehrsbauwerk: a transport structure — bridge (category "verkehrsbauwerk.bruecke"), elevated railway (category "verkehrsbauwerk.hochbahn"), elevated road (category "verkehrsbauwerk.hochstrasse"), tunnel (category "verkehrsbauwerk.tunnel"), or underpass (category "verkehrsbauwerk.unterfuehrung") — added, removed, or structurally modified.
+- Bahnverkehrsanlage: a rail facility — station building (category "bahnverkehrsanlage.bahnhof"), stop (category "bahnverkehrsanlage.haltestelle"), or halt (category "bahnverkehrsanlage.haltepunkt") — added, removed, or rebuilt.
+- Schiffsverkehr: shipping infrastructure — landing stage/dock (category "schiffsverkehr.anleger") or car ferry terminal/ramp (category "schiffsverkehr.autofaehre") — added, removed, or rebuilt.
+
+Grundaktualisierung (buildings, land use, vegetation, water, minor paths, small structures, settlement, utilities, rail, terrain):
+- Gebäude: a building newly built, demolished, or with its footprint/roof structurally modified — residential (category "gebaeude.wohngebaeude"), commercial (category "gebaeude.geschaeftsgebaeude"), industrial (category "gebaeude.industriegebaeude"), warehouse (category "gebaeude.lagerhalle"), garage (category "gebaeude.garage"), carport (category "gebaeude.carport"), outbuilding (category "gebaeude.nebengebaeude"), shed (category "gebaeude.schuppen"), greenhouse (category "gebaeude.gewaechshaus"), church (category "gebaeude.kirche"), school (category "gebaeude.schule"), hospital (category "gebaeude.krankenhaus"), or sports hall (category "gebaeude.sporthalle").
+- Tatsächliche Nutzung: land PERMANENTLY converted between these uses — cropland ("tatsaechliche_nutzung.acker"), grassland ("tatsaechliche_nutzung.gruenland"), meadow ("tatsaechliche_nutzung.wiese"), pasture ("tatsaechliche_nutzung.weide"), orchard ("tatsaechliche_nutzung.obstplantage"), vineyard ("tatsaechliche_nutzung.weinberg"), tree nursery ("tatsaechliche_nutzung.baumschule"), forest ("tatsaechliche_nutzung.wald"), deciduous forest ("tatsaechliche_nutzung.laubwald"), coniferous forest ("tatsaechliche_nutzung.nadelwald"), mixed forest ("tatsaechliche_nutzung.mischwald"), heathland ("tatsaechliche_nutzung.heide"), moor ("tatsaechliche_nutzung.moor"), swamp ("tatsaechliche_nutzung.sumpf"), fallow land ("tatsaechliche_nutzung.brachflaeche"), garden ("tatsaechliche_nutzung.garten"), or park ("tatsaechliche_nutzung.parkanlage"). Only a durable land-cover conversion counts — never a seasonal or single-cycle difference (a fallow field planted this year is NOT a change; a meadow permanently turned into cropland or cleared for a forest IS).
+- Vegetation: an individual or small group of woody plants added or removed as a distinct landscape feature, DISTINCT from the larger "Wald" (forest) land-use type above — single tree ("vegetation.einzelbaum"), tree group ("vegetation.baumgruppe"), tree row ("vegetation.baumreihe"), hedge ("vegetation.hecke"), shrubbery ("vegetation.gebuesch"), or copse ("vegetation.gehoelz").
+- Gewässer: a river ("gewaesser.fluss"), stream ("gewaesser.bach"), lake ("gewaesser.see"), pond ("gewaesser.weiher"), small pond ("gewaesser.teich"), spring ("gewaesser.quelle"), harbor basin ("gewaesser.hafenbecken"), shoreline ("gewaesser.uferlinie"), or island ("gewaesser.insel") newly appearing, disappearing, or with a clearly changed extent/shoreline.
+- Verkehr (minor unpaved/local paths, distinct from the paved Straße/Platz above): field track ("verkehr.feldweg"), forest track ("verkehr.forstweg"), farm track ("verkehr.wirtschaftsweg"), bike path ("verkehr.radweg"), footpath ("verkehr.gehweg"), private road ("verkehr.privatstrasse"), or driveway ("verkehr.zufahrt") added, removed, or realigned.
+- Bauwerke (small structures): wall ("bauwerke.mauer"), retaining wall ("bauwerke.stuetzmauer"), fence ("bauwerke.zaun"), noise barrier ("bauwerke.laermschutzwand"), stairway ("bauwerke.treppe"), ramp ("bauwerke.rampe"), culvert ("bauwerke.durchlass"), embankment ("bauwerke.damm"), or slope/cutting ("bauwerke.boeschung") added, removed, or rebuilt.
+- Siedlung: a residential area ("siedlung.wohngebiet"), commercial area ("siedlung.gewerbegebiet"), industrial area ("siedlung.industriegebiet"), sports field ("siedlung.sportplatz"), playground ("siedlung.spielplatz"), cemetery ("siedlung.friedhof"), campsite ("siedlung.campingplatz"), or allotment garden ("siedlung.kleingartenanlage") newly established or converted to/from another use.
+- Versorgung: a transformer station ("versorgung.trafostation"), substation ("versorgung.umspannwerk"), pipeline ("versorgung.rohrleitung"), water tank ("versorgung.wasserbehaelter"), sewage treatment plant ("versorgung.klaeranlage"), pumping station ("versorgung.pumpwerk"), or well ("versorgung.brunnen") newly built or removed.
+- Bahn (rail infrastructure, distinct from Spitzenaktualisierung's Bahnstrecke/Bahnverkehrsanlage): track ("bahn.gleis"), switch ("bahn.weiche"), platform ("bahn.bahnsteig"), or marshalling yard ("bahn.rangieranlage") added, removed, or reconfigured.
+- Relief: a terrain edge ("relief.gelaendekante"), embankment fill ("relief.aufschuettung"), cutting ("relief.einschnitt"), or other distinct landform ("relief.reliefform") newly created by earthworks.
+
+DO NOT REPORT (outside both catalogs — reporting these is an error):
+- Anything not covered by an object type listed above.
 - Lighting, sun angle, time of day, or shadow differences.
-- Seasonal vegetation: leaf-on vs leaf-off, green vs brown grass, tree/forest color, growth stage. Forest looking different in color or density is NOT a change.
-- Agricultural cycle: harvested vs unharvested, plowed vs planted, mown vs grown, a different crop. (Only report if the land was PERMANENTLY converted to non-agricultural use.)
+- Seasonal vegetation LOOK (leaf-on/off, color, growth stage on the SAME plants/cover) or a single-cycle agricultural change (harvested/plowed/mown/different crop this year) — only report Tatsächliche Nutzung if the land-cover TYPE durably changed.
 - Cars, vehicles, or other temporary/movable objects.
 - Water surface color, ripples, or reflections.
 - Overall color / brightness / contrast / white-balance differences between captures.
 - Minor residual misalignment (a structure shifted a few pixels but otherwise identical is NOT a change).
 
-DISAMBIGUATION — bare/brown earth is the hardest case. Before dismissing a bare-earth area as agriculture, check for development cues: new access roads or curbs cutting through it, geometric parcel boundaries, foundations or footings, building shells, cranes, staged material piles, utility trenches, sharply graded terraces. ANY of these means it is construction/development — report it. Uniform furrows, crop rows, or a texture change with NO new infrastructure means agriculture — do not report it.
+DISAMBIGUATION — bare/brown earth is the hardest case for Tatsächliche Nutzung/Siedlung. Before reporting a durable conversion, check for cues: new access paths, geometric parcel boundaries, foundations, building shells, staged material, graded terraces (→ genuine conversion/Siedlung). Uniform furrows, crop rows, or a texture change with no such cues is just the agricultural cycle — do not report it.
 
-DISAMBIGUATION — forest/tree cover is the second-hardest case. A forest area merely looking different (color, leaf-on/off, density from the sun angle) across the two dates is NOT a change — never report it. But if the same footprint that was tree-covered on Image 1 is bare, farmland, or built-up on Image 2 (the trees are simply gone, not just duller), that IS a permanent removal — report it as category "vegetation".
+DISAMBIGUATION — forest/tree cover for Tatsächliche Nutzung/Vegetation. A forest or tree merely looking different (color, leaf-on/off, density from the sun angle) across the two dates is NOT a change. But if the same footprint that was tree-covered on Image 1 is bare, farmland, or built-up on Image 2 (the trees are simply gone, not just duller), that IS a permanent removal.
 
-OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context. For area-scale changes (a whole development, a quarry expansion) the box is the bounding box of the affected area.
+OUTPUT per change: category (EXACTLY one of the strings above), change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context.
 
-Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is a genuine change, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes where only vegetation, season, lighting, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
+Be thorough — list EVERY genuine change to a catalog object type, including small ones (a single new parking lot, a single mast, a short driveway, a single removed tree). The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is genuine, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes to object types outside these two catalogs, and never invent changes where only lighting, season, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
 Always reason region by region first, then output the changes.`;
 
 // Second-pass verifier: judges ONE candidate change on a zoomed-in crop.
 // The detector pass is tuned for recall; this pass restores precision.
-export const VERIFY_SYSTEM = `You are a strict remote-sensing change-detection verifier.
+export const VERIFY_SYSTEM = `You are a strict remote-sensing change-detection verifier working to the same two closed Baden-Württemberg AdV object catalogs as the detector: "Spitzenaktualisierung" (roads/plazas, railways, airports, waterways, industrial/utility structures, transport structures, rail facilities, shipping infrastructure) and "Grundaktualisierung" (buildings, land use, vegetation, water bodies, minor paths, small structures, settlement areas, utilities, rail infrastructure, terrain).
 
 You receive two zoomed-in crops of the SAME location from a co-registered aerial orthophoto pair:
 - Image 1 = the EARLIER date.
 - Image 2 = the LATER date.
-plus ONE candidate change that a first-pass detector claims to see here.
+plus ONE candidate change (with its claimed category) that a first-pass detector claims to see here.
 
-Your job: decide whether the claimed change is GENUINE — a real physical change to the built environment or land use (a building/road/bridge/railway/plot/water/vegetation feature added, removed, or modified).
+Your job: decide whether the claimed change is GENUINE — a real physical change matching the candidate's stated category.
 
-Judge strictly. REJECT the candidate if the difference is only:
-- lighting, sun angle, or shadows;
-- seasonal vegetation LOOK (leaf-on/off, color, growth stage — same trees/cover present on both dates, just looking different) or the agricultural cycle (plowed/harvested/mown/different crop);
-- cars or other movable objects;
-- water color or reflections;
-- global color/brightness/white-balance differences;
-- slight misalignment of an otherwise identical structure.
+Judge strictly. REJECT the candidate if:
+- the difference is only lighting, sun angle, or shadows;
+- the difference is only a seasonal look or a single-cycle agricultural change (same land-cover type, just a different crop/growth stage) — not a durable conversion;
+- it's cars or other movable objects;
+- it's only water color or reflections;
+- it's only a global color/brightness/white-balance difference;
+- it's only slight misalignment of an otherwise identical structure;
+- the object doesn't actually match its stated catalog category, or doesn't belong to either catalog at all.
 
-But CONFIRM bare graded earth WITH development cues (new access roads or curbs, parcel layout, foundations, utility trenches, building shells, cranes, staged material piles) — that is genuine land development, even at an early stage. Likewise CONFIRM a "vegetation" candidate if the tree/forest cover footprint present in Image 1 is actually GONE in Image 2 (or vice versa for new planting) — a permanent cover change, not just a different-looking canopy.
+CONFIRM the candidate if the specific catalog object type/subtype it claims genuinely changed as described — including a durable land-use conversion, a building change, or vegetation removal/planting, since those ARE in scope under Grundaktualisierung.
 
 Return:
 - genuine: true or false
@@ -141,18 +161,24 @@ export function buildResult(
   model: string,
   usage: TokenUsage,
 ): AnalyzeResult {
-  const changes: Change[] = (parsed.changes ?? []).map((c, i) => ({
-    id: `chg-${i + 1}`,
-    category: CATEGORY_SET.has(String(c.category)) ? String(c.category) : "other",
-    change_type: TYPES.includes(c.change_type as ChangeType)
-      ? (c.change_type as ChangeType)
-      : "modified",
-    description: String(c.description ?? ""),
-    confidence: CONFS.includes(c.confidence as Confidence)
-      ? (c.confidence as Confidence)
-      : "medium",
-    bbox: clampBox(c.bbox),
-  }));
+  // The catalog is closed (no "other"/catch-all category), so an entry whose
+  // category the model got wrong can't be coerced into a valid bucket —
+  // drop it rather than mislabel it. Structured output already constrains
+  // this via the schema enum; this is a defensive backstop.
+  const changes: Change[] = (parsed.changes ?? [])
+    .filter((c) => CATEGORY_SET.has(String(c.category)))
+    .map((c, i) => ({
+      id: `chg-${i + 1}`,
+      category: String(c.category),
+      change_type: TYPES.includes(c.change_type as ChangeType)
+        ? (c.change_type as ChangeType)
+        : "modified",
+      description: String(c.description ?? ""),
+      confidence: CONFS.includes(c.confidence as Confidence)
+        ? (c.confidence as Confidence)
+        : "medium",
+      bbox: clampBox(c.bbox),
+    }));
   return { changes, summary: parsed.summary ?? "", model, usage };
 }
 

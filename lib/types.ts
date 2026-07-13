@@ -3,23 +3,328 @@
 export type ChangeType = "added" | "removed" | "modified";
 export type Confidence = "low" | "medium" | "high";
 
-// Categories of semantic change we ask the model to classify.
+// Categories of semantic change we ask the model to classify — the leaf
+// object-type/subtype values from two Baden-Württemberg AdV catalogs:
+// "Spitzenaktualisierung" (priority currency — transport/utility network)
+// and "Grundaktualisierung" (baseline currency — buildings, land use,
+// vegetation, water, terrain, etc). An object with no subtypes of its own
+// (Straße, Bahnstrecke) is a leaf category by itself; every other object
+// contributes one leaf per subtype/object, keyed "<object>.<subtype>".
 export const CATEGORIES = [
-  "building",
-  "house",
-  "road",
-  "bridge",
-  "railway",
-  "plot",
-  "water",
-  "vegetation",
-  "other",
+  // Spitzenaktualisierung
+  "strasse",
+  "platz.fussgaengerzone",
+  "platz.parkplatz",
+  "platz.rastplatz",
+  "platz.raststaette",
+  "platz.autohof",
+  "bahnstrecke",
+  "flugverkehr.flughafen",
+  "fliessgewaesser.kanal",
+  "gewaesserachse.breitenklasse_3",
+  "gewaesserachse.breitenklasse_6",
+  "gewaesserachse.breitenklasse_12",
+  "industrie_gewerbebauwerk.windrad",
+  "industrie_gewerbebauwerk.freileitungsmast",
+  "industrie_gewerbebauwerk.funkmast",
+  "leitung.freileitung",
+  "verkehrsbauwerk.bruecke",
+  "verkehrsbauwerk.hochbahn",
+  "verkehrsbauwerk.hochstrasse",
+  "verkehrsbauwerk.tunnel",
+  "verkehrsbauwerk.unterfuehrung",
+  "bahnverkehrsanlage.bahnhof",
+  "bahnverkehrsanlage.haltestelle",
+  "bahnverkehrsanlage.haltepunkt",
+  "schiffsverkehr.anleger",
+  "schiffsverkehr.autofaehre",
+  // Grundaktualisierung
+  "gebaeude.wohngebaeude",
+  "gebaeude.geschaeftsgebaeude",
+  "gebaeude.industriegebaeude",
+  "gebaeude.lagerhalle",
+  "gebaeude.garage",
+  "gebaeude.carport",
+  "gebaeude.nebengebaeude",
+  "gebaeude.schuppen",
+  "gebaeude.gewaechshaus",
+  "gebaeude.kirche",
+  "gebaeude.schule",
+  "gebaeude.krankenhaus",
+  "gebaeude.sporthalle",
+  "tatsaechliche_nutzung.acker",
+  "tatsaechliche_nutzung.gruenland",
+  "tatsaechliche_nutzung.wiese",
+  "tatsaechliche_nutzung.weide",
+  "tatsaechliche_nutzung.obstplantage",
+  "tatsaechliche_nutzung.weinberg",
+  "tatsaechliche_nutzung.baumschule",
+  "tatsaechliche_nutzung.wald",
+  "tatsaechliche_nutzung.laubwald",
+  "tatsaechliche_nutzung.nadelwald",
+  "tatsaechliche_nutzung.mischwald",
+  "tatsaechliche_nutzung.heide",
+  "tatsaechliche_nutzung.moor",
+  "tatsaechliche_nutzung.sumpf",
+  "tatsaechliche_nutzung.brachflaeche",
+  "tatsaechliche_nutzung.garten",
+  "tatsaechliche_nutzung.parkanlage",
+  "vegetation.einzelbaum",
+  "vegetation.baumgruppe",
+  "vegetation.baumreihe",
+  "vegetation.hecke",
+  "vegetation.gebuesch",
+  "vegetation.gehoelz",
+  "gewaesser.fluss",
+  "gewaesser.bach",
+  "gewaesser.see",
+  "gewaesser.weiher",
+  "gewaesser.teich",
+  "gewaesser.quelle",
+  "gewaesser.hafenbecken",
+  "gewaesser.uferlinie",
+  "gewaesser.insel",
+  "verkehr.feldweg",
+  "verkehr.forstweg",
+  "verkehr.wirtschaftsweg",
+  "verkehr.radweg",
+  "verkehr.gehweg",
+  "verkehr.privatstrasse",
+  "verkehr.zufahrt",
+  "bauwerke.mauer",
+  "bauwerke.stuetzmauer",
+  "bauwerke.zaun",
+  "bauwerke.laermschutzwand",
+  "bauwerke.treppe",
+  "bauwerke.rampe",
+  "bauwerke.durchlass",
+  "bauwerke.damm",
+  "bauwerke.boeschung",
+  "siedlung.wohngebiet",
+  "siedlung.gewerbegebiet",
+  "siedlung.industriegebiet",
+  "siedlung.sportplatz",
+  "siedlung.spielplatz",
+  "siedlung.friedhof",
+  "siedlung.campingplatz",
+  "siedlung.kleingartenanlage",
+  "versorgung.trafostation",
+  "versorgung.umspannwerk",
+  "versorgung.rohrleitung",
+  "versorgung.wasserbehaelter",
+  "versorgung.klaeranlage",
+  "versorgung.pumpwerk",
+  "versorgung.brunnen",
+  "bahn.gleis",
+  "bahn.weiche",
+  "bahn.bahnsteig",
+  "bahn.rangieranlage",
+  "relief.gelaendekante",
+  "relief.aufschuettung",
+  "relief.einschnitt",
+  "relief.reliefform",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-// Categories checked by default in "Spitzenaktualität" (priority currency)
-// mode; "Grundaktualität" (baseline currency) mode checks every category.
-export const PRIORITY_CATEGORIES: Category[] = ["building", "road", "bridge"];
+// The object-type groupings from the same catalogs, for the category-picker
+// UI: each group is either a single leaf (no subtypes) or an umbrella the
+// user can select as a whole or drill into individual subtypes/objects.
+export interface ObjectTypeGroup {
+  key: string;
+  categories: Category[];
+}
+
+export const SPITZE_GROUPS: ObjectTypeGroup[] = [
+  { key: "strasse", categories: ["strasse"] },
+  {
+    key: "platz",
+    categories: ["platz.fussgaengerzone", "platz.parkplatz", "platz.rastplatz", "platz.raststaette", "platz.autohof"],
+  },
+  { key: "bahnstrecke", categories: ["bahnstrecke"] },
+  { key: "flugverkehr", categories: ["flugverkehr.flughafen"] },
+  { key: "fliessgewaesser", categories: ["fliessgewaesser.kanal"] },
+  {
+    key: "gewaesserachse",
+    categories: ["gewaesserachse.breitenklasse_3", "gewaesserachse.breitenklasse_6", "gewaesserachse.breitenklasse_12"],
+  },
+  {
+    key: "industrie_gewerbebauwerk",
+    categories: [
+      "industrie_gewerbebauwerk.windrad",
+      "industrie_gewerbebauwerk.freileitungsmast",
+      "industrie_gewerbebauwerk.funkmast",
+    ],
+  },
+  { key: "leitung", categories: ["leitung.freileitung"] },
+  {
+    key: "verkehrsbauwerk",
+    categories: [
+      "verkehrsbauwerk.bruecke",
+      "verkehrsbauwerk.hochbahn",
+      "verkehrsbauwerk.hochstrasse",
+      "verkehrsbauwerk.tunnel",
+      "verkehrsbauwerk.unterfuehrung",
+    ],
+  },
+  {
+    key: "bahnverkehrsanlage",
+    categories: ["bahnverkehrsanlage.bahnhof", "bahnverkehrsanlage.haltestelle", "bahnverkehrsanlage.haltepunkt"],
+  },
+  { key: "schiffsverkehr", categories: ["schiffsverkehr.anleger", "schiffsverkehr.autofaehre"] },
+];
+
+export const GRUND_GROUPS: ObjectTypeGroup[] = [
+  {
+    key: "gebaeude",
+    categories: [
+      "gebaeude.wohngebaeude",
+      "gebaeude.geschaeftsgebaeude",
+      "gebaeude.industriegebaeude",
+      "gebaeude.lagerhalle",
+      "gebaeude.garage",
+      "gebaeude.carport",
+      "gebaeude.nebengebaeude",
+      "gebaeude.schuppen",
+      "gebaeude.gewaechshaus",
+      "gebaeude.kirche",
+      "gebaeude.schule",
+      "gebaeude.krankenhaus",
+      "gebaeude.sporthalle",
+    ],
+  },
+  {
+    key: "tatsaechliche_nutzung",
+    categories: [
+      "tatsaechliche_nutzung.acker",
+      "tatsaechliche_nutzung.gruenland",
+      "tatsaechliche_nutzung.wiese",
+      "tatsaechliche_nutzung.weide",
+      "tatsaechliche_nutzung.obstplantage",
+      "tatsaechliche_nutzung.weinberg",
+      "tatsaechliche_nutzung.baumschule",
+      "tatsaechliche_nutzung.wald",
+      "tatsaechliche_nutzung.laubwald",
+      "tatsaechliche_nutzung.nadelwald",
+      "tatsaechliche_nutzung.mischwald",
+      "tatsaechliche_nutzung.heide",
+      "tatsaechliche_nutzung.moor",
+      "tatsaechliche_nutzung.sumpf",
+      "tatsaechliche_nutzung.brachflaeche",
+      "tatsaechliche_nutzung.garten",
+      "tatsaechliche_nutzung.parkanlage",
+    ],
+  },
+  {
+    key: "vegetation",
+    categories: [
+      "vegetation.einzelbaum",
+      "vegetation.baumgruppe",
+      "vegetation.baumreihe",
+      "vegetation.hecke",
+      "vegetation.gebuesch",
+      "vegetation.gehoelz",
+    ],
+  },
+  {
+    key: "gewaesser",
+    categories: [
+      "gewaesser.fluss",
+      "gewaesser.bach",
+      "gewaesser.see",
+      "gewaesser.weiher",
+      "gewaesser.teich",
+      "gewaesser.quelle",
+      "gewaesser.hafenbecken",
+      "gewaesser.uferlinie",
+      "gewaesser.insel",
+    ],
+  },
+  {
+    key: "verkehr",
+    categories: [
+      "verkehr.feldweg",
+      "verkehr.forstweg",
+      "verkehr.wirtschaftsweg",
+      "verkehr.radweg",
+      "verkehr.gehweg",
+      "verkehr.privatstrasse",
+      "verkehr.zufahrt",
+    ],
+  },
+  {
+    key: "bauwerke",
+    categories: [
+      "bauwerke.mauer",
+      "bauwerke.stuetzmauer",
+      "bauwerke.zaun",
+      "bauwerke.laermschutzwand",
+      "bauwerke.treppe",
+      "bauwerke.rampe",
+      "bauwerke.durchlass",
+      "bauwerke.damm",
+      "bauwerke.boeschung",
+    ],
+  },
+  {
+    key: "siedlung",
+    categories: [
+      "siedlung.wohngebiet",
+      "siedlung.gewerbegebiet",
+      "siedlung.industriegebiet",
+      "siedlung.sportplatz",
+      "siedlung.spielplatz",
+      "siedlung.friedhof",
+      "siedlung.campingplatz",
+      "siedlung.kleingartenanlage",
+    ],
+  },
+  {
+    key: "versorgung",
+    categories: [
+      "versorgung.trafostation",
+      "versorgung.umspannwerk",
+      "versorgung.rohrleitung",
+      "versorgung.wasserbehaelter",
+      "versorgung.klaeranlage",
+      "versorgung.pumpwerk",
+      "versorgung.brunnen",
+    ],
+  },
+  {
+    key: "bahn",
+    categories: ["bahn.gleis", "bahn.weiche", "bahn.bahnsteig", "bahn.rangieranlage"],
+  },
+  {
+    key: "relief",
+    categories: ["relief.gelaendekante", "relief.aufschuettung", "relief.einschnitt", "relief.reliefform"],
+  },
+];
+
+// The two top-level "Oberkategorien" of the category tree — Spitzenaktualität
+// is preselected by default (see defaultSelectedCategories); Grundaktualität
+// starts unselected but is equally always toggleable, since there's no
+// separate locked-preset mode anymore.
+export interface CategoryBranch {
+  key: "spitze" | "grund";
+  groups: ObjectTypeGroup[];
+}
+
+export const CATEGORY_BRANCHES: CategoryBranch[] = [
+  { key: "spitze", groups: SPITZE_GROUPS },
+  { key: "grund", groups: GRUND_GROUPS },
+];
+
+export function defaultSelectedCategories(): Record<Category, boolean> {
+  const result: Partial<Record<Category, boolean>> = {};
+  for (const branch of CATEGORY_BRANCHES) {
+    for (const group of branch.groups) {
+      for (const cat of group.categories) {
+        result[cat] = branch.key === "spitze";
+      }
+    }
+  }
+  return result as Record<Category, boolean>;
+}
 
 export interface Change {
   id: string;
@@ -111,17 +416,3 @@ export interface SearchArea {
 }
 
 export const DEFAULT_RADIUS_M = 200;
-
-// ── Category selection presets (§5.0) ──────────────────────────────────────
-// "spitze" (Spitzenaktualität) and "grund" (Grundaktualität) lock the
-// category checkboxes to a fixed set; "custom" (Benutzerdefiniert) unlocks
-// them for the user to pick freely. Independent of whether a search area is
-// active — the two are separate concerns (what to look for vs. where).
-export type CategoryPreset = "spitze" | "grund" | "custom";
-
-export function categoriesForPreset(preset: CategoryPreset): Record<Category, boolean> {
-  const useAll = preset === "grund";
-  return Object.fromEntries(
-    CATEGORIES.map((c) => [c, useAll || PRIORITY_CATEGORIES.includes(c)]),
-  ) as Record<Category, boolean>;
-}
