@@ -52,7 +52,7 @@ export default function SearchAreaSection({
   const pointSet = Number.isFinite(area.lat) && Number.isFinite(area.lon);
 
   return (
-    <div className="card" style={{ marginTop: 14, borderStyle: geoAvailable ? "solid" : "dashed" }}>
+    <div>
       <div
         className="row"
         style={{
