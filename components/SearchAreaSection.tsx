@@ -18,8 +18,8 @@ interface Props {
   disabled?: boolean;
 }
 
-const SHAPES: SearchShape[] = ["circle", "rectangle"];
-const RADIUS_PRESETS = [100, 200, 500, 1000];
+const SHAPES: SearchShape[] = ["circle", "rectangle", "square"];
+const RADIUS_PRESETS = [100, 200, 500, 1000, 2000, 5000];
 
 export default function SearchAreaSection({
   geoAvailable,
@@ -183,6 +183,18 @@ export default function SearchAreaSection({
                     width={100}
                     disabled={disabled}
                   />
+                ) : area.shape === "square" ? (
+                  <NumberField
+                    label={t("search.side")}
+                    value={area.widthM}
+                    min={1}
+                    onCommit={(n) => {
+                      const side = Number.isFinite(n) && n > 0 ? n : DEFAULT_RADIUS_M * 2;
+                      update({ widthM: side, heightM: side, radiusM: side / 2 });
+                    }}
+                    width={100}
+                    disabled={disabled}
+                  />
                 ) : (
                   <>
                     <NumberField
@@ -208,15 +220,21 @@ export default function SearchAreaSection({
                 </span>
               </div>
 
-              {area.shape === "circle" && (
+              {(area.shape === "circle" || area.shape === "square") && (
                 <div>
                   <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>
                     {t("search.quickPick")}
                   </div>
                   <PresetChips
                     values={RADIUS_PRESETS}
-                    activeValue={area.radiusM}
-                    onPick={(v) => update({ radiusM: v })}
+                    activeValue={area.shape === "circle" ? area.radiusM : area.widthM}
+                    onPick={(v) =>
+                      update(
+                        area.shape === "circle"
+                          ? { radiusM: v }
+                          : { widthM: v, heightM: v, radiusM: v / 2 },
+                      )
+                    }
                     disabled={disabled}
                   />
                 </div>
@@ -373,6 +391,13 @@ function ShapeIcon({ shape }: { shape: SearchShape }) {
     return (
       <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden>
         <circle cx={7} cy={7} r={5.5} fill="none" stroke="currentColor" strokeWidth={1.5} />
+      </svg>
+    );
+  }
+  if (shape === "square") {
+    return (
+      <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden>
+        <rect x={2} y={2} width={10} height={10} rx={1.5} fill="none" stroke="currentColor" strokeWidth={1.5} />
       </svg>
     );
   }

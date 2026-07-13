@@ -114,13 +114,20 @@ export default function SearchAreaMap({
         <div className="field-label" style={{ marginBottom: 0 }}>
           {t("search.imageSource")}
         </div>
-        <div className="segmented">
-          <button type="button" aria-pressed={source === "ref"} onClick={() => setSource("ref")}>
-            {t("search.imageSource.ref")}
-          </button>
-          <button type="button" aria-pressed={source === "target"} onClick={() => setSource("target")}>
-            {t("search.imageSource.target")}
-          </button>
+        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div className="segmented">
+            <button type="button" aria-pressed={source === "ref"} onClick={() => setSource("ref")}>
+              {t("search.imageSource.ref")}
+            </button>
+            <button type="button" aria-pressed={source === "target"} onClick={() => setSource("target")}>
+              {t("search.imageSource.target")}
+            </button>
+          </div>
+          {pointSet && !disabled && (
+            <button type="button" onClick={onClear} title={t("search.clearTip")} className="btn-secondary">
+              ✕ {t("search.clear")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -222,12 +229,6 @@ export default function SearchAreaMap({
             <span aria-hidden>✛</span>
             {t("search.drawHint")}
           </div>
-        )}
-
-        {pointSet && !disabled && (
-          <button type="button" onClick={onClear} title={t("search.clearTip")} className="map-clear-btn">
-            ✕ {t("search.clear")}
-          </button>
         )}
 
         {pointSet && (

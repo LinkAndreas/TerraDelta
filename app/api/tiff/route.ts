@@ -7,16 +7,23 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 150 * 1024 * 1024; // 150 MB
 
-async function sharpConvert(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
+interface ConvertResult {
+  data: Buffer;
+  width: number;
+  height: number;
+}
+
+async function sharpConvert(buffer: Buffer): Promise<ConvertResult> {
+  const { data, info } = await sharp(buffer)
     .resize(3000, 3000, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 92 })
-    .toBuffer();
+    .toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height };
 }
 
 // Fallback for TIFF variants libvips cannot handle (e.g. tiled separate planes).
 // geotiff.js reads raw rasters, then we feed the interleaved pixels back to sharp.
-async function geotiffConvert(buffer: Buffer): Promise<Buffer> {
+async function geotiffConvert(buffer: Buffer): Promise<ConvertResult> {
   const { fromArrayBuffer } = await import("geotiff");
 
   // Node Buffer.buffer may be a shared pool slice — copy it out as a standalone ArrayBuffer.
@@ -57,10 +64,11 @@ async function geotiffConvert(buffer: Buffer): Promise<Buffer> {
     }
   }
 
-  return sharp(data, { raw: { width, height, channels: bandCount } })
+  const { data: out, info } = await sharp(data, { raw: { width, height, channels: bandCount } })
     .resize(3000, 3000, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 92 })
-    .toBuffer();
+    .toBuffer({ resolveWithObject: true });
+  return { data: out, width: info.width, height: info.height };
 }
 
 export async function POST(req: NextRequest) {
@@ -81,12 +89,12 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const isTiff = ext === "tif" || ext === "tiff" || file.type === "image/tiff";
 
-    let jpeg: Buffer;
+    let converted: ConvertResult;
     try {
-      jpeg = await sharpConvert(buffer);
+      converted = await sharpConvert(buffer);
     } catch {
       // sharp/libvips doesn't support this TIFF variant — try geotiff.js decoder
-      jpeg = await geotiffConvert(buffer);
+      converted = await geotiffConvert(buffer);
     }
 
     // GeoTIFFs carry georeferencing (geo keys + bounding box) independently of
@@ -95,8 +103,8 @@ export async function POST(req: NextRequest) {
     // input) and coordinate export can use it.
     const geo = isTiff ? await extractGeoRef(buffer) : null;
 
-    const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-    return NextResponse.json({ dataUrl, geo });
+    const dataUrl = `data:image/jpeg;base64,${converted.data.toString("base64")}`;
+    return NextResponse.json({ dataUrl, geo, width: converted.width, height: converted.height });
   } catch (err) {
     const message = err instanceof Error ? err.message : "TIFF conversion failed";
     return NextResponse.json({ error: message }, { status: 500 });
