@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORIES, type AnalyzeResult, type SupportedModels, type TokenUsage, type VerifyResult } from "./types";
+import { CATEGORIES, type AnalyzeResult, type Effort, type SupportedModels, type TokenUsage, type VerifyResult } from "./types";
 import {
   SYSTEM,
   VERIFY_SYSTEM,
@@ -50,7 +50,7 @@ function tokenUsage(usage: { input_tokens?: number; output_tokens?: number } | u
 export async function anthropicDetect(
   referenceDataUrl: string,
   targetDataUrl: string,
-  opts: { model: string; apiKey?: string; language?: string },
+  opts: { model: string; apiKey?: string; language?: string; effort?: Effort },
 ): Promise<AnalyzeResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -67,7 +67,7 @@ export async function anthropicDetect(
     model: opts.model,
     max_tokens: 8000,
     system: SYSTEM,
-    output_config: { format: { type: "json_schema", schema: SCHEMA } },
+    output_config: { effort: opts.effort, format: { type: "json_schema", schema: SCHEMA } },
     messages: [
       {
         role: "user" as const,
@@ -127,6 +127,7 @@ export async function anthropicVerify(
     model: string;
     apiKey?: string;
     language?: string;
+    effort?: Effort;
     candidate: { category: string; change_type: string; description: string };
   },
 ): Promise<VerifyResult> {
@@ -146,7 +147,7 @@ export async function anthropicVerify(
     model: opts.model,
     max_tokens: 1500,
     system: VERIFY_SYSTEM,
-    output_config: { format: { type: "json_schema", schema: VERIFY_SCHEMA } },
+    output_config: { effort: opts.effort, format: { type: "json_schema", schema: VERIFY_SCHEMA } },
     messages: [
       {
         role: "user" as const,

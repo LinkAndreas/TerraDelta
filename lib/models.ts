@@ -1,4 +1,4 @@
-import { SupportedModels, type TokenUsage } from "./types";
+import { SupportedModels, type Currency, type TokenUsage } from "./types";
 
 // Client-safe provider/model metadata (no server SDK imports — safe to import
 // from React components).
@@ -61,7 +61,23 @@ export function priceForModel(model: string): ModelPrice {
   return PRICE_TABLE.find((p) => p.match.test(model))?.price ?? DEFAULT_PRICE;
 }
 
-export function estimateCostUsd(model: string, usage: TokenUsage): number {
+function estimateCostUsd(model: string, usage: TokenUsage): number {
   const price = priceForModel(model);
   return (usage.inputTokens / 1e6) * price.inputPerM + (usage.outputTokens / 1e6) * price.outputPerM;
+}
+
+// Static approximation, not a live FX rate — good enough for a rough
+// estimate that's already only accurate to the model's price tier.
+const USD_TO_EUR = 0.92;
+
+export function estimateCost(model: string, usage: TokenUsage, currency: Currency): number {
+  const usd = estimateCostUsd(model, usage);
+  return currency === "EUR" ? usd * USD_TO_EUR : usd;
+}
+
+// Most runs land well under $1/€1 — show extra precision there so a cheap
+// run doesn't just read as a misleading "0.00".
+export function formatCost(amount: number, currency: Currency): string {
+  const value = amount < 0.01 ? amount.toFixed(4) : amount.toFixed(2);
+  return currency === "EUR" ? `${value} €` : `$${value}`;
 }

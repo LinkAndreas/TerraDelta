@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { detectChanges, verifyDetectedChange } from "@/lib/detect";
 import { PROVIDERS, type Provider } from "@/lib/models";
+import { EFFORT_LEVELS, type Effort } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -8,7 +9,7 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang, candidate } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, effort, candidate } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
       model: typeof model === "string" ? model : "default",
       apiKey: cleanKey,
       language: typeof lang === "string" ? lang : undefined,
+      effort: EFFORT_LEVELS.includes(effort) ? (effort as Effort) : undefined,
       reference,
       target,
     };

@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { PROVIDERS, type Provider } from "@/lib/models";
-import { useI18n } from "@/lib/i18n";
-import { SupportedModels } from "@/lib/types";
+import { useI18n, type StringKey } from "@/lib/i18n";
+import { EFFORT_LEVELS, SupportedModels, type Currency, type Effort } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -17,6 +17,10 @@ interface Props {
   availableModels: Record<Provider, SupportedModels | undefined>;
   onRefreshModels: () => void;
   isFetchingModels: boolean;
+  currency: Currency;
+  setCurrency: (c: Currency) => void;
+  effort: Effort;
+  setEffort: (e: Effort) => void;
 }
 
 export default function Settings({
@@ -31,6 +35,10 @@ export default function Settings({
   availableModels,
   onRefreshModels,
   isFetchingModels,
+  currency,
+  setCurrency,
+  effort,
+  setEffort,
 }: Props) {
   const { t } = useI18n();
 
@@ -115,6 +123,29 @@ export default function Settings({
               <a href={meta.keysUrl} target="_blank" rel="noreferrer">
                 {t("settings.getKey")}
               </a>
+            </div>
+          </div>
+
+          <div title={t("settings.tipCurrency")}>
+            <div className="field-label">{t("settings.currency")}</div>
+            <div className="segmented">
+              <button type="button" aria-pressed={currency === "EUR"} onClick={() => setCurrency("EUR")}>
+                EUR (€)
+              </button>
+              <button type="button" aria-pressed={currency === "USD"} onClick={() => setCurrency("USD")}>
+                USD ($)
+              </button>
+            </div>
+          </div>
+
+          <div title={t("settings.tipEffort")}>
+            <div className="field-label">{t("settings.effort")}</div>
+            <div className="segmented">
+              {EFFORT_LEVELS.map((lvl) => (
+                <button key={lvl} type="button" aria-pressed={effort === lvl} onClick={() => setEffort(lvl)}>
+                  {t(`effort.${lvl}` as StringKey)}
+                </button>
+              ))}
             </div>
           </div>
         </div>

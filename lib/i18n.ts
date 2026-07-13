@@ -10,9 +10,9 @@ export const LANG_NAMES: Record<Lang, string> = { en: "English", de: "Deutsch" }
 export const STRINGS = {
   en: {
     "app.title": "TerraDelta",
-    "app.tagline": "Aerial photo change detector",
+    "app.tagline": "Orthophoto change detector",
     "app.subtitle":
-      "Compare two aerial photos of the same area and automatically find what changed — new or demolished buildings, roads, and land development — while ignoring season, lighting, and shadows.",
+      "Compare two orthophotos of the same area and automatically find what changed — new or demolished buildings, roads, and land development — while ignoring season, lighting, and shadows.",
 
     "lang.label": "Language",
     "theme.toLight": "Switch to light mode",
@@ -38,6 +38,15 @@ export const STRINGS = {
     "settings.tipOpen": "Open settings — choose provider, model and API key.",
     "settings.tipReady": "Model ready. Click to change provider, model, or API key.",
     "settings.tipLimited": "API limit reached — click to check your provider settings or switch keys.",
+    "settings.currency": "Cost currency",
+    "settings.tipCurrency": "Currency used to display the estimated API cost after a run.",
+    "settings.effort": "Reasoning effort",
+    "settings.tipEffort": "How much reasoning effort the model spends per call. Higher effort can improve accuracy but costs more and is slower.",
+    "effort.low": "Low",
+    "effort.medium": "Medium",
+    "effort.high": "High",
+    "effort.xhigh": "X-High",
+    "effort.max": "Max",
     "common.close": "Close",
     "common.done": "Done",
     "run.needKey": "No API key — click to add one",
@@ -52,7 +61,7 @@ export const STRINGS = {
     "upload.later": "Later capture",
     "upload.laterSub": "e.g. 2025",
     "upload.hint": "Click or drop an image",
-    "upload.tip": "Upload an aerial/orthophoto image (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tip": "Upload an orthophoto image (PNG, JPEG, BMP, WebP, TIFF, GIF).",
     "upload.tiffError": "Could not decode this TIFF — the file may use an unsupported encoding (e.g. tiled, 16-bit float, or proprietary GeoTIFF). Try exporting as PNG or JPEG.",
     "upload.formatMismatch": "Both images must be the same file type ({a} vs {b}). Re-upload them in a matching format.",
     "upload.processing": "Processing image…",
@@ -96,7 +105,7 @@ export const STRINGS = {
 
     "summary.heading": "Summary",
     "summary.meta": "{n} changes · model: {model}",
-    "summary.cost": "~${cost} est. API cost · {tokens} tokens",
+    "summary.cost": "~{cost} est. API cost · {tokens} tokens",
     "summary.cost.tip": "Estimated from token usage and this model's published pricing — not an exact bill.",
 
     "compare.heading": "Visual comparison",
@@ -254,9 +263,9 @@ export const STRINGS = {
 
   de: {
     "app.title": "TerraDelta",
-    "app.tagline": "Veränderungserkennung für Luftbilder",
+    "app.tagline": "Veränderungserkennung für Orthophotos",
     "app.subtitle":
-      "Vergleichen Sie zwei Luftbilder derselben Fläche und finden Sie automatisch, was sich verändert hat — neue oder abgerissene Gebäude, Straßen und Landentwicklung — Jahreszeit, Licht und Schatten werden dabei ignoriert.",
+      "Vergleichen Sie zwei Orthophotos derselben Fläche und finden Sie automatisch, was sich verändert hat — neue oder abgerissene Gebäude, Straßen und Landentwicklung — Jahreszeit, Licht und Schatten werden dabei ignoriert.",
 
     "lang.label": "Sprache",
     "theme.toLight": "Zum hellen Modus wechseln",
@@ -282,6 +291,15 @@ export const STRINGS = {
     "settings.tipOpen": "Einstellungen öffnen — Anbieter, Modell und API-Schlüssel wählen.",
     "settings.tipReady": "Modell einsatzbereit. Klicken, um Anbieter, Modell oder API-Schlüssel zu ändern.",
     "settings.tipLimited": "API-Limit erreicht — klicken, um die Anbieter-Einstellungen zu prüfen oder den Schlüssel zu wechseln.",
+    "settings.currency": "Kosten-Währung",
+    "settings.tipCurrency": "Währung zur Anzeige der geschätzten API-Kosten nach einem Lauf.",
+    "settings.effort": "Denkaufwand",
+    "settings.tipEffort": "Wie viel Denkaufwand das Modell pro Aufruf betreibt. Höherer Aufwand kann die Genauigkeit verbessern, kostet aber mehr und ist langsamer.",
+    "effort.low": "Niedrig",
+    "effort.medium": "Mittel",
+    "effort.high": "Hoch",
+    "effort.xhigh": "X-Hoch",
+    "effort.max": "Max",
     "common.close": "Schließen",
     "common.done": "Fertig",
     "run.needKey": "Kein API-Schlüssel — zum Hinzufügen klicken",
@@ -296,7 +314,7 @@ export const STRINGS = {
     "upload.later": "Spätere Aufnahme",
     "upload.laterSub": "z. B. 2025",
     "upload.hint": "Bild anklicken oder hineinziehen",
-    "upload.tip": "Laden Sie ein Luft-/Orthophoto hoch (PNG, JPEG, BMP, WebP, TIFF, GIF).",
+    "upload.tip": "Laden Sie ein Orthophoto hoch (PNG, JPEG, BMP, WebP, TIFF, GIF).",
     "upload.tiffError": "Dieses TIFF konnte nicht dekodiert werden — die Datei verwendet möglicherweise eine nicht unterstützte Kodierung (z. B. Kacheln, 16-Bit-Float oder proprietäres GeoTIFF). Versuchen Sie, als PNG oder JPEG zu exportieren.",
     "upload.formatMismatch": "Beide Bilder müssen denselben Dateityp haben ({a} vs. {b}). Bitte beide im gleichen Format erneut hochladen.",
     "upload.processing": "Bild wird verarbeitet…",
@@ -340,7 +358,7 @@ export const STRINGS = {
 
     "summary.heading": "Zusammenfassung",
     "summary.meta": "{n} Veränderungen · Modell: {model}",
-    "summary.cost": "~{cost} $ geschätzte API-Kosten · {tokens} Tokens",
+    "summary.cost": "~{cost} geschätzte API-Kosten · {tokens} Tokens",
     "summary.cost.tip": "Geschätzt aus dem Token-Verbrauch und der veröffentlichten Preisliste dieses Modells — keine exakte Abrechnung.",
 
     "compare.heading": "Visueller Vergleich",

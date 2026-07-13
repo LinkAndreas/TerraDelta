@@ -346,7 +346,9 @@ a {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px 14px;
+  /* Extra right padding keeps the native dropdown arrow from crowding the
+     border — the browser draws it flush against the padding edge. */
+  padding: 10px 34px 10px 14px;
   min-width: 240px;
   font: inherit;
   font-size: 15px;
@@ -422,7 +424,9 @@ select.lang {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 8px 12px;
+  /* Extra right padding keeps the native dropdown arrow from crowding the
+     border — the browser draws it flush against the padding edge. */
+  padding: 8px 28px 8px 12px;
   font: inherit;
   font-size: 14.5px;
 }

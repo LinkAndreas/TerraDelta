@@ -1,4 +1,4 @@
-import type { AnalyzeResult, VerifyResult } from "./types";
+import type { AnalyzeResult, Effort, VerifyResult } from "./types";
 import { PROVIDERS, type Provider } from "./models";
 import { anthropicDetect, anthropicVerify } from "./claude";
 
@@ -7,6 +7,7 @@ export interface DetectRequest {
   model: string;
   apiKey?: string;
   language?: string;
+  effort?: Effort;
   reference: string;
   target: string;
 }
@@ -18,7 +19,7 @@ export interface VerifyRequest extends DetectRequest {
 export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
-  const o = { model: req.model, apiKey: req.apiKey, language: req.language };
+  const o = { model: req.model, apiKey: req.apiKey, language: req.language, effort: req.effort };
 
   return anthropicDetect(req.reference, req.target, o);
 }
@@ -31,6 +32,7 @@ export async function verifyDetectedChange(req: VerifyRequest): Promise<VerifyRe
     model: req.model,
     apiKey: req.apiKey,
     language: req.language,
+    effort: req.effort,
     candidate: req.candidate,
   });
 }

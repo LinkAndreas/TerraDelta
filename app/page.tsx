@@ -12,18 +12,22 @@ import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
 import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
-import { PROVIDER_KEYS, PROVIDERS, estimateCostUsd, type Provider } from "@/lib/models";
+import { PROVIDER_KEYS, PROVIDERS, estimateCost, formatCost, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
   CATEGORIES,
   categoriesForPreset,
+  DEFAULT_EFFORT,
+  EFFORT_LEVELS,
   type AnalyzeResult,
   type Category,
   type CategoryPreset,
   type Change,
   type ChangeType,
   type Confidence,
+  type Currency,
+  type Effort,
   type SearchArea,
   type SupportedModels,
   type TokenUsage,
@@ -41,12 +45,6 @@ const STAGE_KEY: Record<Stage, StringKey> = {
 };
 
 const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
-
-// Most runs land well under $1 — show extra precision there so a cheap run
-// doesn't just read as a misleading "$0.00".
-function formatCostUsd(usd: number): string {
-  return usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2);
-}
 
 interface TaskResult {
   changes: Change[];
@@ -105,10 +103,12 @@ export default function Home() {
   const [minConf, setMinConf] = useState<Confidence>("low");
   const [query, setQuery] = useState("");
 
-  // Provider / model / API keys (persisted to localStorage).
+  // Provider / model / API keys / cost-estimate currency / reasoning effort (persisted to localStorage).
   const [provider, setProvider] = useState<Provider>("anthropic");
   const [model, setModel] = useState<string>("default");
   const [keys, setKeys] = useState<Record<Provider, string>>({ anthropic: "" });
+  const [currency, setCurrency] = useState<Currency>("EUR");
+  const [effort, setEffort] = useState<Effort>(DEFAULT_EFFORT);
   const [loaded, setLoaded] = useState(false);
   const [availableModels, setAvailableModels] = useState<Record<Provider, SupportedModels | undefined>>({ anthropic: undefined });
   const [isFetchingModels, setIsFetchingModels] = useState(false);
@@ -159,6 +159,8 @@ export default function Home() {
       if (saved.provider && PROVIDERS[saved.provider as Provider]) setProvider(saved.provider);
       if (typeof saved.model === "string") setModel(saved.model);
       if (saved.keys) setKeys({ anthropic: "", ...saved.keys });
+      if (saved.currency === "EUR" || saved.currency === "USD") setCurrency(saved.currency);
+      if (EFFORT_LEVELS.includes(saved.effort)) setEffort(saved.effort);
     } catch {
       /* ignore */
     }
@@ -167,8 +169,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORE_KEY, JSON.stringify({ provider, model, keys }));
-  }, [loaded, provider, model, keys]);
+    localStorage.setItem(STORE_KEY, JSON.stringify({ provider, model, keys, currency, effort }));
+  }, [loaded, provider, model, keys, currency, effort]);
 
   const startRef = useRef(0);
   const busy = stage !== "idle";
@@ -289,6 +291,7 @@ export default function Home() {
                 model,
                 apiKey: keys[provider] || undefined,
                 lang,
+                effort,
               }),
             });
             const data = await res.json();
@@ -358,6 +361,7 @@ export default function Home() {
                   model,
                   apiKey: keys[provider] || undefined,
                   lang,
+                  effort,
                   candidate: {
                     category: chg.category,
                     change_type: chg.change_type,
@@ -657,7 +661,7 @@ export default function Home() {
                 {(result.usage.inputTokens > 0 || result.usage.outputTokens > 0) && (
                   <span className="muted" style={{ fontSize: 12 }} title={t("summary.cost.tip")}>
                     {t("summary.cost", {
-                      cost: formatCostUsd(estimateCostUsd(result.model, result.usage)),
+                      cost: formatCost(estimateCost(result.model, result.usage, currency), currency),
                       tokens: (result.usage.inputTokens + result.usage.outputTokens).toLocaleString(),
                     })}
                   </span>
@@ -731,6 +735,10 @@ export default function Home() {
         availableModels={availableModels}
         onRefreshModels={refreshModels}
         isFetchingModels={isFetchingModels}
+        currency={currency}
+        setCurrency={setCurrency}
+        effort={effort}
+        setEffort={setEffort}
       />
     </div>
   );

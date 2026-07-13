@@ -37,11 +37,21 @@ export interface Change {
 }
 
 // Token counts for one API call, as reported by the provider — used to
-// estimate the API spend of a run (see lib/models.ts estimateCostUsd).
+// estimate the API spend of a run (see lib/models.ts estimateCost).
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
 }
+
+// Display currency for the estimated API cost (§ lib/models.ts) — a user
+// preference, independent of the provider/model actually billing in USD.
+export type Currency = "USD" | "EUR";
+
+// How much reasoning effort the model spends per call (Anthropic's
+// output_config.effort) — higher effort trades cost/latency for accuracy.
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+export const DEFAULT_EFFORT: Effort = "medium";
 
 export interface AnalyzeResult {
   changes: Change[];
