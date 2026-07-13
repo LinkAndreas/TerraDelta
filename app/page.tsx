@@ -17,12 +17,11 @@ import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
   CATEGORIES,
-  categoriesForPreset,
   DEFAULT_EFFORT,
+  defaultSelectedCategories,
   EFFORT_LEVELS,
   type AnalyzeResult,
   type Category,
-  type CategoryPreset,
   type Change,
   type ChangeType,
   type Confidence,
@@ -77,10 +76,7 @@ export default function Home() {
   // each with its own dedicated UI section.
   const [searchAreaEnabled, setSearchAreaEnabled] = useState(false);
   const [searchArea, setSearchArea] = useState<SearchArea | null>(null);
-  const [categoryPreset, setCategoryPreset] = useState<CategoryPreset>("grund");
-  const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(() =>
-    categoriesForPreset("grund"),
-  );
+  const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(defaultSelectedCategories);
 
   const [stage, setStage] = useState<Stage>("idle");
   const [progressMsg, setProgressMsg] = useState("");
@@ -198,10 +194,10 @@ export default function Home() {
 
   // One-line summary shown on the collapsed "Options" toggle, so the current
   // settings are visible without expanding it.
-  const categorySummary =
-    categoryPreset === "custom"
-      ? `${t("preset.custom")} (${CATEGORIES.filter((c) => selectedCategories[c]).length})`
-      : t(categoryPreset === "grund" ? "preset.grund" : "preset.spitze");
+  const categorySummary = t("options.categoriesCount", {
+    n: CATEGORIES.filter((c) => selectedCategories[c]).length,
+    total: CATEGORIES.length,
+  });
   const areaSummary =
     searchAreaEnabled && hasValidPoint && searchArea
       ? searchArea.shape === "circle"
@@ -588,8 +584,6 @@ export default function Home() {
               />
 
               <CategorySection
-                preset={categoryPreset}
-                setPreset={setCategoryPreset}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
                 disabled={busy}

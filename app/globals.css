@@ -525,72 +525,92 @@ select.lang {
   color: var(--on-accent);
 }
 
-/* Chip checkbox (category selection) — checked/unchecked state is carried by
-   background + border color, not just the native checkbox rendering, so it
-   stays clearly legible even when disabled (locked presets). */
-.chip-checkbox {
-  position: relative;
-  display: inline-flex;
+/* Category tree (Spitzenaktualität object catalog) — a compact, collapsible
+   hierarchy instead of a wall of chips: each object type is one line (with a
+   native tri-state checkbox covering all/none/some of its subtypes), and its
+   subtypes only take up space once expanded. */
+.category-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.category-row {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--card-2);
-  color: var(--muted);
-  font-size: 13.5px;
-  font-weight: 500;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.chip-checkbox input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
+.category-row:hover {
+  background: var(--card-2);
+}
+
+.category-row[data-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.category-row[data-disabled="true"]:hover {
+  background: none;
+}
+
+.category-row input {
+  flex: none;
   cursor: pointer;
+  accent-color: var(--accent);
 }
 
-.chip-checkbox input:disabled {
+.category-row input:disabled {
   cursor: not-allowed;
 }
 
-.chip-checkbox[data-checked="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--text);
+.category-row-label {
+  font-size: 13.5px;
 }
 
-.chip-checkbox[data-disabled="true"] {
-  cursor: not-allowed;
-  border-style: dashed;
-}
-
-.chip-checkbox[data-disabled="true"]:not([data-checked="true"]) {
-  opacity: 0.5;
-}
-
-.chip-checkbox-mark {
+.category-disclosure {
+  flex: none;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  border-radius: 4px;
-  border: 1.5px solid var(--muted);
-  color: transparent;
+  background: none;
+  border: none;
+  padding: 0;
   font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
 }
 
-.chip-checkbox[data-checked="true"] .chip-checkbox-mark {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+.category-disclosure:hover {
+  color: var(--text);
+}
+
+.category-row-spacer {
+  flex: none;
+  width: 18px;
+}
+
+.category-subtypes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 4px 27px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.category-row-sub .category-row-label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.category-row-sub[data-checked="true"] .category-row-label {
+  color: var(--text);
 }
 
 /* Search-area map resize handle: a small precise marker with a generous
