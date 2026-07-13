@@ -168,7 +168,7 @@ export default function ReportTable({
           <select
             value={minConf}
             onChange={(e) => setMinConf(e.target.value as Confidence)}
-            style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 8px", fontSize: 14 }}
+            style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 24px 6px 8px", fontSize: 14 }}
           >
             <option value="low">{t("conf.any")}</option>
             <option value="medium">{t("conf.mediumPlus")}</option>

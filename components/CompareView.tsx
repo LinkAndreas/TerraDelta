@@ -113,13 +113,10 @@ export default function CompareView({
               <defs>
                 <mask id={maskId}>
                   <rect x="0" y="0" width="100" height="100" fill="white" />
-                  {shown.map(({ c }) => (
-                    <polygon
-                      key={c.id}
-                      points={c.polygon.map(([px, py]) => `${px * 100},${py * 100}`).join(" ")}
-                      fill="black"
-                    />
-                  ))}
+                  {shown.map(({ c }) => {
+                    const [x, y, w, h] = c.bbox;
+                    return <rect key={c.id} x={x * 100} y={y * 100} width={w * 100} height={h * 100} fill="black" />;
+                  })}
                 </mask>
               </defs>
               <rect x="0" y="0" width="100" height="100" fill="black" opacity="0.55" mask={`url(#${maskId})`} />
@@ -127,13 +124,14 @@ export default function CompareView({
           )}
           {showBoxes &&
             shown.map(({ c }) => {
+              const [x, y, w, h] = c.bbox;
               const color = CHANGE_COLORS[c.change_type];
               const isSel = c.id === selectedId;
-              const points = c.polygon.map(([px, py]) => `${px * 100},${py * 100}`).join(" ");
+              const rectProps = { x: x * 100, y: y * 100, width: w * 100, height: h * 100 };
               return (
                 <g key={c.id} style={{ cursor: "pointer" }} onClick={() => onSelect(isSel ? null : c.id)}>
-                  <polygon
-                    points={points}
+                  <rect
+                    {...rectProps}
                     fill={isSel ? color : "transparent"}
                     fillOpacity={isSel ? 0.16 : 0}
                     stroke="#000"
@@ -141,8 +139,8 @@ export default function CompareView({
                     strokeWidth={isSel ? 5 : 4}
                     vectorEffect="non-scaling-stroke"
                   />
-                  <polygon
-                    points={points}
+                  <rect
+                    {...rectProps}
                     fill="none"
                     stroke={color}
                     strokeWidth={isSel ? 3 : 2}

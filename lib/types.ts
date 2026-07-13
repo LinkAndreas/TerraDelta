@@ -28,20 +28,36 @@ export interface Change {
   description: string;
   confidence: Confidence;
   // Normalized bounding box on the aligned reference image:
-  // [x, y, width, height], each in 0..1, origin top-left. Kept alongside the
-  // polygon for fast spatial checks (dedup IoU, search-area pruning) and as
-  // a fallback anchor for labels.
+  // [x, y, width, height], each in 0..1, origin top-left. This is the sole
+  // geometry for a change — used for map overlays, dedup IoU, search-area
+  // pruning, and export. A tight rectangle is a simpler, more reliable
+  // target for the model than a free-form polygon (fewer points to get
+  // right, no risk of a self-intersecting or mismatched-scale outline).
   bbox: [number, number, number, number];
-  // Precise outline of the changed area, normalized [0..1] points on the
-  // aligned reference image. Always populated — falls back to the bbox's
-  // four corners when the model can't produce a tighter outline.
-  polygon: [number, number][];
 }
+
+// Token counts for one API call, as reported by the provider — used to
+// estimate the API spend of a run (see lib/models.ts estimateCost).
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+// Display currency for the estimated API cost (§ lib/models.ts) — a user
+// preference, independent of the provider/model actually billing in USD.
+export type Currency = "USD" | "EUR";
+
+// How much reasoning effort the model spends per call (Anthropic's
+// output_config.effort) — higher effort trades cost/latency for accuracy.
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+export const DEFAULT_EFFORT: Effort = "medium";
 
 export interface AnalyzeResult {
   changes: Change[];
   summary: string;
   model: string;
+  usage: TokenUsage;
 }
 
 // Result of the second-pass verification of a single candidate change,
@@ -51,9 +67,8 @@ export interface VerifyResult {
   confidence: Confidence;
   // Refined tight box in the CROP's normalized coordinates ([0,0,0,0] if rejected).
   bbox: [number, number, number, number];
-  // Refined outline in the CROP's normalized coordinates (empty if rejected).
-  polygon: [number, number][];
   reason: string;
+  usage: TokenUsage;
 }
 
 export type SupportedModels = { id: string; name: string }[];

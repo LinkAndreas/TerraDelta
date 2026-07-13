@@ -47,11 +47,6 @@ export function normalizedToLonLat(geo: GeoRef, nx: number, ny: number): [number
 }
 
 export function changeCenterLonLat(geo: GeoRef, change: Change): [number, number] {
-  if (change.polygon.length >= 3) {
-    const n = change.polygon.length;
-    const [sx, sy] = change.polygon.reduce(([ax, ay], [px, py]) => [ax + px, ay + py], [0, 0]);
-    return normalizedToLonLat(geo, sx / n, sy / n);
-  }
   const [x, y, w, h] = change.bbox;
   return normalizedToLonLat(geo, x + w / 2, y + h / 2);
 }
@@ -140,8 +135,8 @@ export type OverlayShape =
 
 export function searchAreaToOverlayShape(geo: GeoRef, area: SearchArea): OverlayShape {
   const [cx, cy] = lonLatToNormalized(geo, area.lon, area.lat);
-  const halfW = (area.shape === "circle" ? area.radiusM : area.widthM) / 2;
-  const halfH = (area.shape === "circle" ? area.radiusM : area.heightM) / 2;
+  const halfW = area.shape === "circle" ? area.radiusM : area.widthM / 2;
+  const halfH = area.shape === "circle" ? area.radiusM : area.heightM / 2;
 
   const dLon = halfW / metersPerDegLon(area.lat);
   const dLat = halfH / METERS_PER_DEG_LAT;
