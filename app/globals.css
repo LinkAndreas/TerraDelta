@@ -147,6 +147,9 @@ button:disabled {
 }
 
 input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="search"],
 input:not([type]),
 input[placeholder] {
   background: var(--bg);
@@ -155,6 +158,42 @@ input[placeholder] {
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 15px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="text"]:disabled,
+input[type="number"]:disabled,
+input[type="password"]:disabled,
+input[type="search"]:disabled,
+input:not([type]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--card-2);
+}
+
+/* Hide native number-input spinners so any type="number" field renders
+   identically to the app's text inputs — mismatched spin buttons were the
+   main thing making the search-area fields look unstyled. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="search"]:focus-visible,
+input:not([type]):focus-visible,
+.field-select:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 table {
@@ -196,6 +235,31 @@ a {
   border-radius: 10px;
   padding: 12px 16px;
   font-size: 14px;
+}
+
+/* Warning-toned alert (e.g. API rate limit / quota reached) — distinct from
+   .error's red "something is broken" tone: amber signals "temporary, the
+   key still works, just wait or adjust settings". */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #92400e;
+  background: rgba(146, 64, 14, 0.16);
+  color: #fcd34d;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.alert p {
+  color: inherit;
+}
+
+.alert-icon {
+  flex: none;
+  font-size: 16px;
+  line-height: 1.4;
 }
 
 .pill {
@@ -327,22 +391,6 @@ a {
   height: 8px;
   border-radius: 50%;
   display: inline-block;
-}
-
-.link-hint {
-  display: inline-block;
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: #f59e0b;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.link-hint:hover {
-  background: transparent;
-  text-decoration: underline;
 }
 
 /* Top bar */
@@ -570,6 +618,182 @@ select.lang {
 .map-handle-hit:hover .map-handle-dot,
 .map-handle-hit:active .map-handle-dot {
   transform: scale(1.35);
+}
+
+.map-handle-hit[data-disabled="true"] {
+  cursor: not-allowed !important;
+}
+
+/* Search-area map: a top-anchored instruction bar rather than a pill dropped
+   over the center of the image — center placement covers the exact spot the
+   user needs to look at and click, which is the one thing to avoid here. */
+.map-hint-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+/* Bottom caption bar: size/coords + the move/resize reminder live together
+   in one strip instead of two separate overlays competing for attention. */
+.map-caption-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.map-caption-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  color: #fff;
+}
+
+.map-caption-hint {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-clear-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  backdrop-filter: blur(3px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.map-clear-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Locked (read-only) state while an analysis is running: dim + block
+   interaction, but keep everything legible rather than hiding it. */
+.locked-surface {
+  opacity: 0.6;
+  pointer-events: none;
+  filter: saturate(0.7);
+}
+
+.locked-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Collapsible "Options" toggle row */
+.options-toggle {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+
+.options-toggle:hover {
+  background: var(--card-2);
+  border-color: var(--accent);
+}
+
+.options-toggle-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: var(--muted);
+}
+
+.options-toggle[aria-expanded="true"] .options-toggle-chevron {
+  transform: rotate(90deg);
+}
+
+/* Export dropdown menu */
+.dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: var(--card-2);
+}
+
+.dropdown-item:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 /* Toggle switch */

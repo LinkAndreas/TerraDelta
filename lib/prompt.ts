@@ -40,7 +40,7 @@ DO NOT REPORT (these are NOT semantic changes — reporting them is an error):
 
 DISAMBIGUATION — bare/brown earth is the hardest case. Before dismissing a bare-earth area as agriculture, check for development cues: new access roads or curbs cutting through it, geometric parcel boundaries, foundations or footings, building shells, cranes, staged material piles, utility trenches, sharply graded terraces. ANY of these means it is construction/development — report it. Uniform furrows, crop rows, or a texture change with NO new infrastructure means agriculture — do not report it.
 
-OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image. For area-scale changes (a whole development, a quarry expansion) the box covers the whole affected area.
+OUTPUT per change: category, change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image, AND a polygon — an array of [x, y] vertices (4-12 points, normalized, in order tracing the perimeter) that closely outlines the actual shape of the changed object, not just its bounding box. Trace the real footprint: a rectangular building is 4 points, but an L-shaped building, a curved road segment, or an irregular development area should follow its true outline so the highlight matches the object, not a loose box around it. If you cannot make out a precise outline, repeat the box's four corners as the polygon. For area-scale changes (a whole development, a quarry expansion) the polygon traces the affected area's actual boundary, and the box is its bounding box.
 
 Be thorough — list EVERY genuine structural / infrastructure / land-development change, including small single houses and short driveways. The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is a genuine change, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes where only vegetation, season, lighting, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
@@ -71,6 +71,7 @@ Return:
 - genuine: true or false
 - confidence: certainty about the change if genuine (high = unmistakable, medium = likely, low = possible); use "low" if rejecting
 - bbox: if genuine, a TIGHT normalized [x, y, width, height] box around the changed object in THIS crop (origin top-left); otherwise [0, 0, 0, 0]
+- polygon: if genuine, an array of [x, y] vertices (4-12 points, normalized, in this crop) tracing the object's actual outline — not just its bounding box; repeat the bbox's four corners if you can't make out a tighter outline. Otherwise an empty array.
 - reason: one short sentence explaining the verdict.`;
 
 export function verifyLanguageInstruction(lang?: string): string {
@@ -90,11 +91,12 @@ export const JSON_INSTRUCTION = `Return ONLY a JSON object (no markdown, no comm
       "change_type": "added" | "removed" | "modified",
       "description": "what changed",
       "confidence": "low" | "medium" | "high",
-      "bbox": [x, y, width, height]
+      "bbox": [x, y, width, height],
+      "polygon": [[x, y], [x, y], ...]
     }
   ]
 }
-All bbox values are normalized 0..1 with origin at the top-left of THIS image. If nothing genuine changed, "changes" must be an empty array.`;
+All bbox/polygon values are normalized 0..1 with origin at the top-left of THIS image. polygon must have at least 3 points tracing the changed object's actual outline — repeat the bbox's four corners if you can't make out a tighter shape. If nothing genuine changed, "changes" must be an empty array.`;
 
 export function languageInstruction(lang?: string): string {
   if (lang === "de") {
@@ -122,6 +124,34 @@ function clampBox(b: unknown): [number, number, number, number] {
   return [cx, cy, Math.min(Math.max(w, 0), 1 - cx), Math.min(Math.max(h, 0), 1 - cy)];
 }
 
+const clamp01 = (n: number) => Math.min(Math.max(n, 0), 1);
+
+// The four corners of a bbox, used whenever the model doesn't return a
+// usable polygon — keeps `polygon` always populated and renderable.
+function boxCorners(b: [number, number, number, number]): [number, number][] {
+  const [x, y, w, h] = b;
+  return [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+}
+
+function clampPolygon(p: unknown, fallbackBox: [number, number, number, number]): [number, number][] {
+  if (Array.isArray(p)) {
+    const pts = p
+      .map((pt): [number, number] | null =>
+        Array.isArray(pt) && pt.length >= 2 && Number.isFinite(Number(pt[0])) && Number.isFinite(Number(pt[1]))
+          ? [clamp01(Number(pt[0])), clamp01(Number(pt[1]))]
+          : null,
+      )
+      .filter((pt): pt is [number, number] => pt !== null);
+    if (pts.length >= 3) return pts;
+  }
+  return boxCorners(fallbackBox);
+}
+
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
 const CONFS: Confidence[] = ["low", "medium", "high"];
 
@@ -129,18 +159,22 @@ export function buildResult(
   parsed: { summary?: string; changes?: Partial<Change>[] },
   model: string,
 ): AnalyzeResult {
-  const changes: Change[] = (parsed.changes ?? []).map((c, i) => ({
-    id: `chg-${i + 1}`,
-    category: String(c.category ?? "other"),
-    change_type: TYPES.includes(c.change_type as ChangeType)
-      ? (c.change_type as ChangeType)
-      : "modified",
-    description: String(c.description ?? ""),
-    confidence: CONFS.includes(c.confidence as Confidence)
-      ? (c.confidence as Confidence)
-      : "medium",
-    bbox: clampBox(c.bbox),
-  }));
+  const changes: Change[] = (parsed.changes ?? []).map((c, i) => {
+    const bbox = clampBox(c.bbox);
+    return {
+      id: `chg-${i + 1}`,
+      category: String(c.category ?? "other"),
+      change_type: TYPES.includes(c.change_type as ChangeType)
+        ? (c.change_type as ChangeType)
+        : "modified",
+      description: String(c.description ?? ""),
+      confidence: CONFS.includes(c.confidence as Confidence)
+        ? (c.confidence as Confidence)
+        : "medium",
+      bbox,
+      polygon: clampPolygon(c.polygon, bbox),
+    };
+  });
   return { changes, summary: parsed.summary ?? "", model };
 }
 
@@ -148,14 +182,18 @@ export function buildVerifyResult(parsed: {
   genuine?: unknown;
   confidence?: unknown;
   bbox?: unknown;
+  polygon?: unknown;
   reason?: unknown;
 }): VerifyResult {
+  const genuine = parsed.genuine === true;
+  const bbox = clampBox(parsed.bbox);
   return {
-    genuine: parsed.genuine === true,
+    genuine,
     confidence: CONFS.includes(parsed.confidence as Confidence)
       ? (parsed.confidence as Confidence)
       : "medium",
-    bbox: clampBox(parsed.bbox),
+    bbox,
+    polygon: genuine ? clampPolygon(parsed.polygon, bbox) : [],
     reason: String(parsed.reason ?? ""),
   };
 }

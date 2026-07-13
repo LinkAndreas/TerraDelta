@@ -14,9 +14,10 @@ interface Props {
   sublabel: string;
   url: string | null;
   onFile: (dataUrl: string, meta: UploadMeta) => void;
+  disabled?: boolean;
 }
 
-export default function UploadZone({ label, sublabel, url, onFile }: Props) {
+export default function UploadZone({ label, sublabel, url, onFile, disabled = false }: Props) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -107,8 +108,9 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
 
   return (
     <div
-      onClick={() => inputRef.current?.click()}
+      onClick={() => !disabled && inputRef.current?.click()}
       onDragOver={(e) => {
+        if (disabled) return;
         e.preventDefault();
         setDrag(true);
       }}
@@ -116,22 +118,25 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
       onDrop={(e) => {
         e.preventDefault();
         setDrag(false);
+        if (disabled) return;
         handle(e.dataTransfer.files[0]);
       }}
-      title={t("upload.tip")}
+      title={disabled ? t("run.lockedTip") : t("upload.tip")}
       style={{
         flex: "1 1 260px",
         minHeight: 150,
-        border: `2px dashed ${drag ? "var(--accent)" : "var(--border)"}`,
+        border: `2px dashed ${drag && !disabled ? "var(--accent)" : "var(--border)"}`,
         borderRadius: 10,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         overflow: "hidden",
         position: "relative",
-        background: drag ? "var(--accent-soft)" : "var(--card)",
+        background: drag && !disabled ? "var(--accent-soft)" : "var(--card)",
+        opacity: disabled ? 0.6 : 1,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         textAlign: "center",
+        transition: "opacity 0.15s ease",
       }}
     >
       {tiffError ? (
@@ -182,6 +187,22 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
               {fileName}
             </span>
           )}
+          {disabled && (
+            <span
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                fontSize: 12,
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "rgba(0,0,0,0.6)",
+                color: "#fff",
+              }}
+            >
+              🔒
+            </span>
+          )}
         </>
       ) : (
         <div style={{ padding: 20 }}>
@@ -195,6 +216,7 @@ export default function UploadZone({ label, sublabel, url, onFile }: Props) {
         type="file"
         accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.gif"
         hidden
+        disabled={disabled}
         onChange={(e) => handle(e.target.files?.[0])}
       />
     </div>

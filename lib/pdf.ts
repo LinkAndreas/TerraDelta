@@ -82,21 +82,32 @@ export async function renderWithBoxes(srcUrl: string, changes: Change[], px: num
 
       for (let i = 0; i < changes.length; i++) {
         const c = changes[i];
-        const [bx, by, bw, bh] = c.bbox;
+        const [bx, by] = c.bbox;
         const rx = bx * px;
         const ry = by * h;
-        const rw = bw * px;
-        const rh = bh * h;
         const color = CHANGE_COLORS[c.change_type];
+
+        const tracePolygon = () => {
+          ctx.beginPath();
+          c.polygon.forEach(([px2, py2], j) => {
+            const x = px2 * px;
+            const y = py2 * h;
+            if (j === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.closePath();
+        };
 
         // Shadow stroke
         ctx.strokeStyle = "rgba(0,0,0,0.75)";
         ctx.lineWidth = 3.5;
-        ctx.strokeRect(rx, ry, rw, rh);
+        tracePolygon();
+        ctx.stroke();
         // Color stroke
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.strokeRect(rx, ry, rw, rh);
+        tracePolygon();
+        ctx.stroke();
 
         // Number badge
         const bW = 20;

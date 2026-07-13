@@ -27,9 +27,16 @@ const SCHEMA = {
           change_type: { type: "string", enum: ["added", "removed", "modified"] },
           description: { type: "string" },
           confidence: { type: "string", enum: ["low", "medium", "high"] },
-          bbox: { type: "array", items: { type: "number" } },
+          bbox: { type: "array", items: { type: "number" }, description: "[x, y, width, height], normalized 0..1." },
+          polygon: {
+            type: "array",
+            items: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
+            minItems: 3,
+            maxItems: 12,
+            description: "Vertices tracing the changed object's actual outline, normalized 0..1. Repeat the bbox's four corners if unsure.",
+          },
         },
-        required: ["category", "change_type", "description", "confidence", "bbox"],
+        required: ["category", "change_type", "description", "confidence", "bbox", "polygon"],
       },
     },
   },
@@ -99,9 +106,14 @@ const VERIFY_SCHEMA = {
     genuine: { type: "boolean" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
     bbox: { type: "array", items: { type: "number" } },
+    polygon: {
+      type: "array",
+      items: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
+      description: "Vertices tracing the object's actual outline in this crop, normalized 0..1. Empty if rejected.",
+    },
     reason: { type: "string" },
   },
-  required: ["genuine", "confidence", "bbox", "reason"],
+  required: ["genuine", "confidence", "bbox", "polygon", "reason"],
 };
 
 export async function anthropicVerify(

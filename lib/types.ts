@@ -28,8 +28,14 @@ export interface Change {
   description: string;
   confidence: Confidence;
   // Normalized bounding box on the aligned reference image:
-  // [x, y, width, height], each in 0..1, origin top-left.
+  // [x, y, width, height], each in 0..1, origin top-left. Kept alongside the
+  // polygon for fast spatial checks (dedup IoU, search-area pruning) and as
+  // a fallback anchor for labels.
   bbox: [number, number, number, number];
+  // Precise outline of the changed area, normalized [0..1] points on the
+  // aligned reference image. Always populated — falls back to the bbox's
+  // four corners when the model can't produce a tighter outline.
+  polygon: [number, number][];
 }
 
 export interface AnalyzeResult {
@@ -45,6 +51,8 @@ export interface VerifyResult {
   confidence: Confidence;
   // Refined tight box in the CROP's normalized coordinates ([0,0,0,0] if rejected).
   bbox: [number, number, number, number];
+  // Refined outline in the CROP's normalized coordinates (empty if rejected).
+  polygon: [number, number][];
   reason: string;
 }
 

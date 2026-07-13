@@ -69,7 +69,15 @@ export async function POST(req: NextRequest) {
       message =
         'Authentication failed — the API key is invalid or expired. Open "⚙ Provider & API key", clear the key field to use the server key, or paste a valid one. Details: ' +
         message;
+    } else if (status === 429 || /rate.?limit|quota|too many requests|overloaded/i.test(message)) {
+      message =
+        "Rate limit or usage quota reached for this API key. Wait a moment and try again, or use a different key/model in \"⚙ Provider & API key\". Details: " +
+        message;
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Forward the provider's actual status for recognized client errors so
+    // the UI can react (e.g. a distinct rate-limit alert) — anything else
+    // collapses to 500, matching prior behavior.
+    const httpStatus = status === 401 || status === 403 || status === 429 ? status : 500;
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

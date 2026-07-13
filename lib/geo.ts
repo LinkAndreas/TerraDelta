@@ -47,6 +47,11 @@ export function normalizedToLonLat(geo: GeoRef, nx: number, ny: number): [number
 }
 
 export function changeCenterLonLat(geo: GeoRef, change: Change): [number, number] {
+  if (change.polygon.length >= 3) {
+    const n = change.polygon.length;
+    const [sx, sy] = change.polygon.reduce(([ax, ay], [px, py]) => [ax + px, ay + py], [0, 0]);
+    return normalizedToLonLat(geo, sx / n, sy / n);
+  }
   const [x, y, w, h] = change.bbox;
   return normalizedToLonLat(geo, x + w / 2, y + h / 2);
 }
