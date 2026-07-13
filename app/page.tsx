@@ -569,7 +569,7 @@ export default function Home() {
           </button>
 
           {optionsOpen && (
-            <>
+            <div className="options-panel">
               <SearchAreaSection
                 geoAvailable={geoAvailable}
                 enabled={searchAreaEnabled}
@@ -588,7 +588,7 @@ export default function Home() {
                 setSelectedCategories={setSelectedCategories}
                 disabled={busy}
               />
-            </>
+            </div>
           )}
         </div>
 

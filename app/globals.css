@@ -420,15 +420,43 @@ a {
 }
 
 select.lang {
-  background: var(--card);
+  /* appearance: none drops the browser's own control chrome, which has an
+     intrinsic minimum height that doesn't respect padding/line-height —
+     that mismatch was why this select sat taller than .icon-btn even with
+     the same box model. With it gone, both are plain CSS boxes (same
+     border, padding, line-height) and line up exactly. The dropdown arrow
+     is replaced with a hand-drawn chevron positioned with its own generous
+     inset from the edge. `currentColor` doesn't reliably resolve inside an
+     SVG referenced from `background-image` (it fell back to black, which
+     is why the arrow disappeared against the dark theme) — the color is
+     baked into the SVG per theme below instead. */
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23ece9e3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 10px 6px;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 9px;
-  /* Extra right padding keeps the native dropdown arrow from crowding the
-     border — the browser draws it flush against the padding edge. */
-  padding: 8px 28px 8px 12px;
+  /* .icon-btn is inline-flex, so ITS height comes from content metrics, not
+     from line-height math — matching padding/font-size alone (above) got
+     close but not pixel-exact. Pinning an explicit height here (measured
+     against the rendered topbar buttons) closes that last gap. */
+  height: 32px;
+  padding: 0 32px 0 13px;
   font: inherit;
-  font-size: 14.5px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+:root[data-theme="light"] select.lang {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232b2824' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+select.lang:hover {
+  background-color: var(--card-2);
 }
 
 .overlay-svg {
@@ -573,26 +601,35 @@ select.lang {
 
 .category-disclosure {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: none;
   border: none;
+  border-radius: 8px;
   padding: 0;
-  font-size: 10px;
-  color: var(--muted);
+  margin: -8px 0;
+  font-size: 18px;
+  color: var(--text);
+  opacity: 0.65;
   cursor: pointer;
+  transition: background 0.12s ease, opacity 0.12s ease;
 }
 
 .category-disclosure:hover {
-  color: var(--text);
+  background: var(--border);
+  opacity: 1;
+}
+
+.category-disclosure:active {
+  background: var(--accent-soft);
 }
 
 .category-row-spacer {
   flex: none;
-  width: 18px;
+  width: 34px;
 }
 
 .category-subtypes {
@@ -753,6 +790,32 @@ select.lang {
 
 .options-toggle[aria-expanded="true"] .options-toggle-chevron {
   transform: rotate(90deg);
+}
+
+/* Flattens the toggle's bottom corners so it reads as the header of the
+   panel below rather than a separate floating pill. */
+.options-toggle[aria-expanded="true"] {
+  border-radius: 10px 10px 0 0;
+}
+
+/* The expanded options content (search area + categories) — attached
+   directly under the toggle (no gap, square top corners) so both sections
+   visually read as belonging to "Optionen" instead of floating as their own
+   independent cards. Same background as the enclosing .card (not
+   --card-2) so hover states inside (e.g. .category-row) still show up
+   against it. */
+.options-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 18px;
+}
+
+.options-panel > * + * {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
 }
 
 /* Export dropdown menu */
