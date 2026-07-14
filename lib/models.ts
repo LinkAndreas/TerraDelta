@@ -61,9 +61,23 @@ export function priceForModel(model: string): ModelPrice {
   return PRICE_TABLE.find((p) => p.match.test(model))?.price ?? DEFAULT_PRICE;
 }
 
+// Anthropic's standard prompt-caching multipliers on the base input price:
+// writing a new cache entry (5-min ephemeral TTL, what this app uses) costs
+// 1.25x; reading a cache hit costs 0.1x. Applied on top of the same
+// per-model input price looked up above — see lib/claude.ts cachedSystem for
+// where these tokens come from (the repeated system prompt across a run's
+// many tile/verify calls).
+const CACHE_WRITE_MULTIPLIER = 1.25;
+const CACHE_READ_MULTIPLIER = 0.1;
+
 function estimateCostUsd(model: string, usage: TokenUsage): number {
   const price = priceForModel(model);
-  return (usage.inputTokens / 1e6) * price.inputPerM + (usage.outputTokens / 1e6) * price.outputPerM;
+  return (
+    (usage.inputTokens / 1e6) * price.inputPerM +
+    (usage.outputTokens / 1e6) * price.outputPerM +
+    ((usage.cacheWriteTokens ?? 0) / 1e6) * price.inputPerM * CACHE_WRITE_MULTIPLIER +
+    ((usage.cacheReadTokens ?? 0) / 1e6) * price.inputPerM * CACHE_READ_MULTIPLIER
+  );
 }
 
 // Static approximation, not a live FX rate — good enough for a rough

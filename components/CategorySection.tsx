@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 import { useI18n, type StringKey } from "@/lib/i18n";
-import { CATEGORY_BRANCHES, type Category, type CategoryObject } from "@/lib/types";
+import { CATEGORY_BRANCHES, CATEGORY_REF, oarOf, type Category, type CategoryObject } from "@/lib/types";
+
+// Small muted badge showing the official Mini-OK BW catalog reference
+// (OAR object-type code, optionally "/WAR" subtype code) next to a label —
+// lets a user cross-check a category against the source spec.
+function RefBadge({ refCode }: { refCode: string }) {
+  return (
+    <span className="muted" style={{ fontSize: 10.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
+      {refCode}
+    </span>
+  );
+}
 
 interface Props {
   selectedCategories: Record<Category, boolean>;
@@ -25,6 +36,7 @@ function TreeRow({
   onToggleOpen,
   bold,
   groupTip,
+  refCode,
 }: {
   label: string;
   categories: Category[];
@@ -35,6 +47,7 @@ function TreeRow({
   onToggleOpen: () => void;
   bold?: boolean;
   groupTip?: string;
+  refCode?: string;
 }) {
   const selectedCount = categories.filter((c) => checked[c]).length;
   const allChecked = selectedCount === categories.length;
@@ -61,8 +74,9 @@ function TreeRow({
         onClick={onToggleOpen}
       >
         {label}
+        {refCode && <RefBadge refCode={refCode} />}
       </span>
-      <span className="muted" style={{ fontSize: 11.5, marginLeft: "auto" }}>
+      <span className="muted" style={{ fontSize: 11.5, flex: "none", whiteSpace: "nowrap" }}>
         {selectedCount}/{categories.length}
       </span>
     </div>
@@ -106,7 +120,10 @@ export default function CategorySection({ selectedCategories, setSelectedCategor
         <label key={obj.key} className="category-row" data-disabled={disabled}>
           <span className="category-row-spacer" aria-hidden />
           <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => toggleOne(cat, e.target.checked)} />
-          <span className="category-row-label">{t(`obj.${obj.key}` as StringKey)}</span>
+          <span className="category-row-label">
+            {t(`obj.${obj.key}` as StringKey)}
+            <RefBadge refCode={CATEGORY_REF[cat]} />
+          </span>
         </label>
       );
     }
@@ -123,6 +140,7 @@ export default function CategorySection({ selectedCategories, setSelectedCategor
           isOpen={isOpen}
           onToggleOpen={() => toggleExpanded(obj.key)}
           groupTip={t("category.groupTip")}
+          refCode={oarOf(obj.categories[0])}
         />
         {isOpen && (
           <div className="category-subtypes">
@@ -136,7 +154,10 @@ export default function CategorySection({ selectedCategories, setSelectedCategor
                     disabled={disabled}
                     onChange={(e) => toggleOne(cat, e.target.checked)}
                   />
-                  <span className="category-row-label">{t(`cat.${cat}` as StringKey)}</span>
+                  <span className="category-row-label">
+                    {t(`cat.${cat}` as StringKey)}
+                    <RefBadge refCode={CATEGORY_REF[cat]} />
+                  </span>
                 </label>
               );
             })}

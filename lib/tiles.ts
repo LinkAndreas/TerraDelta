@@ -3,7 +3,7 @@
 // in-frame -> far better recall and localization). Also maps per-tile boxes
 // back to global coordinates and de-duplicates overlapping detections.
 
-import type { Change } from "./types";
+import { CATEGORY_REF, type Category, type Change } from "./types";
 
 export interface Tile {
   refUrl: string;
@@ -209,11 +209,27 @@ function containment(
   return minArea <= 0 ? 0 : (ix * iy) / minArea;
 }
 
+// OAR object-type family of a category (the part before "/" in
+// CATEGORY_REF), or the raw string if it's not a recognized catalog leaf.
+// Two categories in the same family are either literal subtypes of one
+// official object type (e.g. "platz.parkplatz"/"platz.rastplatz", both under
+// OAR 42009) or — for three specific pairs — two app-level categories that
+// map to the exact same official WAR code (raststaette/autohof,
+// hochbahn/hochstrasse, tunnel/unterfuehrung; see CATEGORY_REF's note).
+function oarFamily(category: string): string {
+  const ref = CATEGORY_REF[category as Category];
+  return ref ? ref.split("/")[0] : category;
+}
+
 // Merge detections from overlapping tiles: drop near-duplicate boxes of the
-// same change type, keeping the higher-confidence / larger one. Same-category
-// boxes are also deduped by containment, so a change re-detected at a coarser
-// zoom doesn't appear twice — while distinct objects inside an area-scale
-// change (houses within a new "plot") survive because their category differs.
+// same change type, keeping the higher-confidence / larger one. Boxes are
+// also deduped by containment when they're the same OAR family — not just
+// exact same category — so a change re-detected at a coarser zoom, OR the
+// same real object classified under two adjacent subtypes/synonym-pairs by
+// different detector passes (e.g. one tile calls a rest stop "raststaette",
+// an overlapping tile calls it "autohof"), doesn't appear twice. Distinct
+// objects inside an area-scale change (houses within a new "plot") still
+// survive because they belong to unrelated OAR families entirely.
 export function dedupe(changes: Change[]): Change[] {
   const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
   const sorted = [...changes].sort(
@@ -227,7 +243,7 @@ export function dedupe(changes: Change[]): Change[] {
       (k) =>
         k.change_type === c.change_type &&
         (iou(k.bbox, c.bbox) > 0.4 ||
-          (k.category === c.category && containment(k.bbox, c.bbox) > 0.75)),
+          (oarFamily(k.category) === oarFamily(c.category) && containment(k.bbox, c.bbox) > 0.75)),
     );
     if (!dup) kept.push(c);
   }
