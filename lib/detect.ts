@@ -1,4 +1,4 @@
-import type { AnalyzeResult, Effort, VerifyResult } from "./types";
+import type { AnalyzeResult, Category, Effort, VerifyResult } from "./types";
 import { PROVIDERS, type Provider } from "./models";
 import { anthropicDetect, anthropicVerify } from "./claude";
 
@@ -10,6 +10,10 @@ export interface DetectRequest {
   effort?: Effort;
   reference: string;
   target: string;
+  // The user's current category selection — scopes both what the model is
+  // told to report and the schema enum it must report within. Omitted/empty
+  // means "no restriction" (the full catalog), not "nothing in scope".
+  categories?: Category[];
 }
 
 export interface VerifyRequest extends DetectRequest {
@@ -19,7 +23,7 @@ export interface VerifyRequest extends DetectRequest {
 export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
-  const o = { model: req.model, apiKey: req.apiKey, language: req.language, effort: req.effort };
+  const o = { model: req.model, apiKey: req.apiKey, language: req.language, effort: req.effort, categories: req.categories };
 
   return anthropicDetect(req.reference, req.target, o);
 }

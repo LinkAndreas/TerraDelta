@@ -6,13 +6,14 @@ import CompareView from "@/components/CompareView";
 import ReportTable from "@/components/ReportTable";
 import SearchAreaSection from "@/components/SearchAreaSection";
 import CategorySection from "@/components/CategorySection";
+import CostSummary from "@/components/CostSummary";
 import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
 import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
-import { PROVIDER_KEYS, PROVIDERS, estimateCost, formatCost, type Provider } from "@/lib/models";
+import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
@@ -231,6 +232,7 @@ export default function Home() {
     setRateLimitAlert(false);
     setResult(null);
     setSelectedId(null);
+    setOptionsOpen(false);
     startRef.current = Date.now();
     setElapsed(0);
 
@@ -272,6 +274,13 @@ export default function Home() {
         setProgressMsg(t("progress.region", { done, total: tasks.length }));
       };
 
+      // Scope the model's search to exactly what's selected, instead of
+      // always asking it to hunt through the full 62-category catalog and
+      // discarding the unwanted results afterward (see lib/prompt.ts
+      // buildSystem) — cuts noise and misclassification risk on runs
+      // restricted to a small subset like Spitzenaktualisierung alone.
+      const enabledCategories = CATEGORIES.filter((c) => selectedCategories[c]);
+
       const results: TaskResult[] = await runPool<Tile, TaskResult>(
         tasks,
         4,
@@ -288,6 +297,7 @@ export default function Home() {
                 apiKey: keys[provider] || undefined,
                 lang,
                 effort,
+                categories: enabledCategories,
               }),
             });
             const data = await res.json();
@@ -414,8 +424,10 @@ export default function Home() {
         (acc, u) => ({
           inputTokens: acc.inputTokens + (u?.inputTokens ?? 0),
           outputTokens: acc.outputTokens + (u?.outputTokens ?? 0),
+          cacheWriteTokens: (acc.cacheWriteTokens ?? 0) + (u?.cacheWriteTokens ?? 0),
+          cacheReadTokens: (acc.cacheReadTokens ?? 0) + (u?.cacheReadTokens ?? 0),
         }),
-        { inputTokens: 0, outputTokens: 0 },
+        { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
       );
 
       setResult({ changes: filtered, summary, model: usedModel, usage: totalUsage });
@@ -453,7 +465,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <p className="muted" style={{ margin: "14px 0 0", maxWidth: 860, fontSize: 15.5 }}>
+          <p className="muted app-subtitle" style={{ margin: "14px 0 0", fontSize: 15.5, lineHeight: 1.55 }}>
             {t("app.subtitle")}
           </p>
         </div>
@@ -461,13 +473,16 @@ export default function Home() {
           <button
             className="icon-btn"
             onClick={() => setSettingsOpen(true)}
-            title={modelStatusTip}
-            aria-label={t("settings.heading")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}
+            title={t("settings.tipOpen")}
+            aria-label={t("settings.topbarLabel")}
+            style={{ width: 44, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}
           >
-            <span className="status-dot" style={{ background: modelStatusColor }} aria-hidden />
-            {providerShort} · {model}
-            <span aria-hidden style={{ opacity: 0.75 }}>⚙</span>
+            {/* The gear glyph (U+2699, plain monochrome dingbat) renders
+                visibly smaller than the sun/moon emoji next to it at the
+                same font-size — emoji get real color-glyph metrics, this
+                doesn't. Bumped up to compensate so both read as the same
+                visual weight/size in the button. */}
+            <span aria-hidden style={{ fontSize: 21 }}>⚙</span>
           </button>
           <button
             className="icon-btn"
@@ -592,10 +607,19 @@ export default function Home() {
           )}
         </div>
 
-        <div className="row" style={{ gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+        <div className="row" style={{ gap: 12, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
           <button onClick={run} disabled={!canRun} title={t("run.tip")}>
             {busy && <span className="spinner" />}
             {t(STAGE_KEY[stage])}
+          </button>
+          <button
+            className="model-indicator"
+            onClick={() => setSettingsOpen(true)}
+            title={modelStatusTip}
+            aria-label={t("settings.topbarLabel")}
+          >
+            <span className="status-dot" style={{ background: modelStatusColor }} aria-hidden />
+            {providerShort} · {model}
           </button>
           {align && stage === "idle" && (
             <span className="pill">
@@ -652,17 +676,11 @@ export default function Home() {
                 <span className="muted" style={{ fontSize: 12 }}>
                   {t("summary.meta", { n: result.changes.length, model: result.model })}
                 </span>
-                {(result.usage.inputTokens > 0 || result.usage.outputTokens > 0) && (
-                  <span className="muted" style={{ fontSize: 12 }} title={t("summary.cost.tip")}>
-                    {t("summary.cost", {
-                      cost: formatCost(estimateCost(result.model, result.usage, currency), currency),
-                      tokens: (result.usage.inputTokens + result.usage.outputTokens).toLocaleString(),
-                    })}
-                  </span>
-                )}
               </div>
             </div>
           )}
+
+          <CostSummary result={result} currency={currency} />
 
           {/* Comparison spans full width (much larger), report below it. */}
           <div style={{ marginBottom: 16 }}>

@@ -3,6 +3,7 @@
 import {
   CATEGORIES,
   type AnalyzeResult,
+  type Category,
   type Change,
   type ChangeType,
   type Confidence,
@@ -10,7 +11,17 @@ import {
   type VerifyResult,
 } from "./types";
 
-export const SYSTEM = `You are a meticulous remote-sensing change-detection analyst working to the Baden-Württemberg Mini-OK BW object catalog (AS 7.1.2), reproduced in full below. It has two overlapping subsets:
+// The full catalog description is reused verbatim across every run — the
+// model always sees all 62 object types, described together, so it can
+// disambiguate between neighboring/overlapping types correctly (e.g. a new
+// road's Straße area vs. its Straßenachse centerline). What changes per run
+// is which of those types it's actually allowed to REPORT (see
+// `scopeClause` below) — narrowing that down to the user's current
+// selection, instead of leaving the full 62-type catalog reportable on every
+// run regardless of selection, is what keeps a small Spitzenaktualisierung-
+// only run from drowning in noise/misclassifications against the 50 extra
+// Grundaktualisierung types the user never asked for.
+const CATALOG_SYSTEM = `You are a meticulous remote-sensing change-detection analyst working to the Baden-Württemberg Mini-OK BW object catalog (AS 7.1.2), reproduced in full below. It has two overlapping subsets:
 - "Spitzenaktualisierung" (priority currency) — 12 transport/utility network object types.
 - "Grundaktualisierung" (baseline currency) — all 62 object types, including those same 12 plus 50 more covering settlement areas, land use, water bodies, minor paths, structures, localities, and survey/reference features.
 
@@ -69,11 +80,41 @@ DISAMBIGUATION — bare/brown earth is the hardest case for Vegetation und Landw
 
 DISAMBIGUATION — forest/tree cover for Vegetation und Landwirtschaft. Forest merely looking different (color, leaf-on/off, density from the sun angle) across the two dates is NOT a change. But if the same footprint that was tree-covered on Image 1 is bare, farmland, or built-up on Image 2 (the trees are simply gone, not just duller), that IS a permanent removal.
 
+DISAMBIGUATION — ONE change, ONE category, even when several object types technically apply. Several catalog types describe the SAME physical route/area from different angles (an area type plus its own centerline/axis type covering the identical footprint): Straße/Straßenverkehr area vs. Straßenachse/Fahrbahnachse/Fahrwegachse axis; Bahnstrecke/Bahnverkehr area vs. the same rail line's Gleis; Schiffsverkehr area vs. Schifffahrtslinie. When a single new/removed/modified route or area would trigger more than one of these for the exact same footprint, report it ONCE under the single most specific type that actually matches what's visible (prefer the concrete object — e.g. Straße for a new paved road — over its generic traffic-area or axis counterpart) rather than emitting one entry per matching type. Do not manufacture a second entry for the same footprint just because another catalog type could technically also describe it.
+
+DISAMBIGUATION — a few catalog entries cover two named things under ONE code: "Raststätte, Autohof" (rest stop and truck stop share one type), "Hochbahn, Hochstraße" (elevated railway and elevated road share one type), and "Tunnel, Unterführung" (tunnel and underpass share one type). Where this app's category list splits such a pair into two separate reportable categories (e.g. "platz.raststaette" vs "platz.autohof"), pick whichever of the two names the pair's OWN description matches (truck stop → autohof, highway rest stop → raststaette; railway on the elevated structure → hochbahn, road on it → hochstrasse; passage under the ground → tunnel, passage under another route → unterfuehrung) — don't report both for the same object.
+
 OUTPUT per change: category (EXACTLY one of the strings above), change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context.
 
 Be thorough — list EVERY genuine change to a catalog object type, including small ones (a single new parking lot, a single mast, a short driveway). The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is genuine, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes to object types outside this catalog, and never invent changes where only lighting, season, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
-Always reason region by region first, then output the changes.`;
+Always reason region by region first, then output the changes — but keep that reasoning brief: a short clause per region actually worth mentioning (skip regions with nothing notable rather than narrating "no change here" for each one), not a full paragraph per grid cell. This image may be one of dozens analyzed in the same run, so terse, high-signal reasoning matters as much as thoroughness in the final changes list.`;
+
+// Restricts what the detector is allowed to REPORT to the user's current
+// category selection, while the catalog description above (all 62 types) is
+// left intact so the model still has the surrounding context needed to tell
+// neighboring types apart. Without this, every run — even one scoped to
+// Spitzenaktualisierung's 12 object types by the UI's own category picker —
+// asked the model to also hunt for and disambiguate against the other 50
+// Grundaktualisierung types on every image, which both wasted output budget
+// on unwanted detections (later discarded client-side) and increased
+// misclassification risk on the types the user actually cares about, since
+// the model had to hold all 62 in mind at once regardless of selection.
+function scopeClause(enabledCategories: readonly Category[]): string {
+  if (enabledCategories.length >= CATEGORIES.length) {
+    return "\n\nSCOPE FOR THIS RUN: all catalog object types above are in scope — report changes for any of them.";
+  }
+  const list = enabledCategories.map((c) => `"${c}"`).join(", ");
+  return (
+    `\n\nSCOPE FOR THIS RUN: only these ${enabledCategories.length} of the ${CATEGORIES.length} catalog categories are in scope: [${list}]. ` +
+    "The full catalog above is reproduced only so you can correctly disambiguate borderline cases (e.g. telling an in-scope type apart from a similar-looking out-of-scope one) — but ONLY output changes whose category is in the in-scope list. " +
+    "Do NOT report a change to any catalog object type that is not in that list, even if you're confident it genuinely changed; treat it exactly like something outside the catalog entirely."
+  );
+}
+
+export function buildSystem(enabledCategories: readonly Category[]): string {
+  return CATALOG_SYSTEM + scopeClause(enabledCategories);
+}
 
 // Second-pass verifier: judges ONE candidate change on a zoomed-in crop.
 // The detector pass is tuned for recall; this pass restores precision.

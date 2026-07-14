@@ -322,7 +322,7 @@ a {
 .modal-body {
   padding: 24px;
   display: grid;
-  gap: 22px;
+  gap: 24px;
 }
 
 .modal-foot {
@@ -330,6 +330,46 @@ a {
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
+}
+
+/* One meaningful group of related fields (e.g. "Model & API key") within the
+   settings modal — a divider between sections (except the first) does the
+   job of separating unrelated concerns without a heavier boxed-card look. */
+.settings-section {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-section + .settings-section {
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section-head {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-section-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.settings-section-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Small, always-visible explanation under a control — the `title` tooltip
+   on the same field is undiscoverable (hover-only), so anything worth
+   knowing before touching the control is repeated here as plain text. */
+.field-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 7px;
 }
 
 .field-label {
@@ -341,17 +381,40 @@ a {
   font-weight: 600;
 }
 
+/* Same hand-drawn-chevron technique as select.lang (see its comment for
+   why appearance:none is needed) — kept as a separate rule since this one
+   is a full-width form field (var(--bg) background, like the text inputs
+   around it) rather than a compact toolbar control (select.lang's
+   var(--card)). */
 .field-select {
-  background: var(--bg);
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23ece9e3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
-  /* Extra right padding keeps the native dropdown arrow from crowding the
-     border — the browser draws it flush against the padding edge. */
+  /* Extra right padding keeps the chevron from crowding the border. */
   padding: 10px 34px 10px 14px;
-  min-width: 240px;
+  width: 100%;
   font: inherit;
   font-size: 15px;
+}
+
+:root[data-theme="light"] .field-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232b2824' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.field-select:hover:not(:disabled) {
+  background-color: var(--card-2);
+}
+
+.field-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .provider-option {
@@ -405,6 +468,15 @@ a {
   margin-bottom: 24px;
 }
 
+/* Leading-aligned with the logo icon above it (not indented under the
+   wordmark) — on desktop capped to the left ~2/3 of the container so lines
+   stay a comfortable reading length; the 768px breakpoint below widens it
+   back to the full container width once there's no room to spare. */
+.app-subtitle {
+  width: 100%;
+  max-width: 66%;
+}
+
 .icon-btn {
   background: var(--card);
   border: 1px solid var(--border);
@@ -416,6 +488,30 @@ a {
 }
 
 .icon-btn:hover {
+  background: var(--card-2);
+}
+
+/* Sits beside the primary run button, so its box needs to match that
+   button's actual rendered height (46px — from the default `button` rule's
+   font-size 15 / line-height / 10px padding, not something derivable from
+   .icon-btn's own metrics) rather than the shorter, denser .icon-btn used
+   for standalone topbar icon buttons. */
+.model-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.model-indicator:hover {
   background: var(--card-2);
 }
 
@@ -597,6 +693,19 @@ select.lang:hover {
 
 .category-row-label {
   font-size: 13.5px;
+  /* Flex items refuse to shrink below their text's min-content size by
+     default (min-width:auto) — without this, a long label like
+     "Grundaktualität" plus the trailing "n/total" count (pushed to the
+     far right via margin-left:auto) forced the row wider than its
+     container instead of yielding, cutting the count off-screen on
+     narrow viewports. flex:1 lets it take the remaining space and
+     min-width:0 lets it actually shrink into that space, ellipsis-
+     truncating instead of overflowing. */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-disclosure {
@@ -1039,6 +1148,10 @@ select.lang:hover {
     gap: 16px;
   }
 
+  .app-subtitle {
+    max-width: 100%;
+  }
+
   .card {
     padding: 16px;
   }
@@ -1080,12 +1193,15 @@ select.lang:hover {
 
   /* Full-width only for standalone action buttons (run button, modal "Done",
      dropdown items, …) — excludes buttons meant to sit inline/compact:
-     segmented controls, preset chips, and icon/secondary buttons paired with
-     a label or input in the same row. Without these exclusions every button
-     in a segmented group (e.g. the category preset tabs) stretched to 100%
-     of its own width inside an inline-flex row, blowing the row way past
-     the viewport and forcing horizontal scroll. */
-  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn) {
+     segmented controls, preset chips, icon/secondary buttons paired with a
+     label or input in the same row, and the category tree's disclosure
+     toggle (a small fixed-size ▸/▾ button inside each row — without this
+     exclusion it inflated to fill the row, squeezing its own label/count
+     siblings down to zero width). Without these exclusions every button in
+     a segmented group (e.g. the category preset tabs) stretched to 100% of
+     its own width inside an inline-flex row, blowing the row way past the
+     viewport and forcing horizontal scroll. */
+  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn):not(.category-disclosure) {
     width: 100%;
   }
 
@@ -1114,21 +1230,14 @@ select.lang:hover {
     flex-wrap: wrap;
   }
 
-  .topbar .row button,
+  /* Labeled controls (Guide, the language select) share the remaining
+     row width; square icon buttons (Settings gear, theme toggle) keep
+     their natural compact size instead of stretching to match — matched
+     by the `flex: "0 0 auto"` set inline on those buttons in page.tsx. */
+  .topbar .row button:not(.icon-btn),
   .topbar .row select {
     flex: 1 1 auto;
     min-width: 0;
-  }
-
-  /* The settings button's label carries the current provider/model name,
-     which can be long enough to force the rest of the row past the
-     viewport edge (e.g. "Claude · claude-sonnet-5"). Give it the full
-     row to itself and ellipsis-truncate as a safety net, leaving the
-     three short, fixed-length controls to share the line below. */
-  .topbar .row > button:first-child {
-    flex-basis: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .field-select {

@@ -94,6 +94,101 @@ export const CATEGORIES = [
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
+// Official Mini-OK BW (AS 7.1.2) catalog reference for every leaf category —
+// "OAR" (Objektart-Kennung, the 5-digit object-type code) alone, or
+// "OAR/WAR" when the leaf is a subtype/attribute-value of that object type
+// (WAR = Werteart-Kennung, the attribute-value code from the FKT/ART/BWF/etc.
+// column). Shown in the UI and used in exports so a change can be cross-
+// checked against the source spec. NOTE: three pairs of leaves here share a
+// single WAR code in the spec (raststaette+autohof -> 5330;
+// hochbahn+hochstrasse -> 1830; tunnel+unterfuehrung -> 1870) — the catalog
+// splits each pair into two visually-distinguishable categories for the
+// model even though the official spec treats them as one value; see
+// SYSTEM's disambiguation note for how the detector is told to handle this.
+export const CATEGORY_REF: Record<Category, string> = {
+  strasse: "42002",
+  "platz.fussgaengerzone": "42009/5130",
+  "platz.parkplatz": "42009/5310",
+  "platz.rastplatz": "42009/5320",
+  "platz.raststaette": "42009/5330",
+  "platz.autohof": "42009/5330",
+  bahnstrecke: "42014",
+  "flugverkehr.flughafen": "42015/5511",
+  "fliessgewaesser.kanal": "44001/8300",
+  "gewaesserachse.breitenklasse_3": "44004/BRG-3",
+  "gewaesserachse.breitenklasse_6": "44004/BRG-6",
+  "gewaesserachse.breitenklasse_12": "44004/BRG-12",
+  "industrie_gewerbebauwerk.windrad": "51002/1220",
+  "industrie_gewerbebauwerk.freileitungsmast": "51002/1251",
+  "industrie_gewerbebauwerk.funkmast": "51002/1260",
+  "leitung.freileitung": "51005/1110",
+  "verkehrsbauwerk.bruecke": "53001/1800",
+  "verkehrsbauwerk.hochbahn": "53001/1830",
+  "verkehrsbauwerk.hochstrasse": "53001/1830",
+  "verkehrsbauwerk.tunnel": "53001/1870",
+  "verkehrsbauwerk.unterfuehrung": "53001/1870",
+  "bahnverkehrsanlage.bahnhof": "53004/1010",
+  "bahnverkehrsanlage.haltestelle": "53004/1020",
+  "bahnverkehrsanlage.haltepunkt": "53004/1030",
+  "einrichtungen_schiffsverkehr.anleger": "53008/1460",
+  "schifffahrtslinie_faehrverkehr.autofaehre": "57002/1710",
+  "siedlungsflaeche.wohnbauflaeche": "41001",
+  "siedlungsflaeche.industrie_gewerbeflaeche": "41002",
+  "siedlungsflaeche.halde": "41003",
+  "siedlungsflaeche.bergbaubetrieb": "41004",
+  "siedlungsflaeche.tagebau_grube_steinbruch": "41005",
+  "siedlungsflaeche.flaeche_gemischter_nutzung": "41006",
+  "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung": "41007",
+  "siedlungsflaeche.sport_freizeit_erholungsflaeche": "41008",
+  "siedlungsflaeche.friedhof": "41009",
+  "verkehr.strassenverkehr": "42001",
+  "verkehr.strassenachse": "42003",
+  "verkehr.fahrbahnachse": "42005",
+  "verkehr.fahrwegachse": "42008",
+  "verkehr.bahnverkehr": "42010",
+  "verkehr.schiffsverkehr_allgemein": "42016",
+  "vegetation_landwirtschaft.landwirtschaft": "43001",
+  "vegetation_landwirtschaft.wald": "43002",
+  "vegetation_landwirtschaft.gehoelz": "43003",
+  "vegetation_landwirtschaft.heide": "43004",
+  "vegetation_landwirtschaft.moor": "43005",
+  "vegetation_landwirtschaft.sumpf": "43006",
+  "vegetation_landwirtschaft.unland_vegetationslose_flaeche": "43007",
+  "gewaesser.wasserlauf": "44002",
+  "gewaesser.kanal": "44003",
+  "gewaesser.hafenbecken": "44005",
+  "gewaesser.stehendes_gewaesser": "44006",
+  "bauwerke_anlagen.turm": "51001",
+  "bauwerke_anlagen.vorratsbehaelter_speicherbauwerk": "51003",
+  "bauwerke_anlagen.transportanlage": "51004",
+  "bauwerke_anlagen.bauwerk_sport_freizeit_erholung": "51006",
+  "bauwerke_anlagen.historisches_bauwerk": "51007",
+  "bauwerke_anlagen.sonstiges_bauwerk": "51009",
+  "ortslagen_haefen.ortslage": "52001",
+  "ortslagen_haefen.hafen": "52002",
+  "ortslagen_haefen.schleuse": "52003",
+  "ortslagen_haefen.testgelaende": "52005",
+  "verkehrsbauwerke_anlagen.strassenverkehrsanlage": "53002",
+  "verkehrsbauwerke_anlagen.weg_pfad_steig": "53003",
+  "verkehrsbauwerke_anlagen.seilbahn_schwebebahn": "53005",
+  "verkehrsbauwerke_anlagen.gleis": "53006",
+  "verkehrsbauwerke_anlagen.flugverkehrsanlage": "53007",
+  "verkehrsbauwerke_anlagen.bauwerk_gewaesserbereich": "53009",
+  "sonstige_merkmale.vegetationsmerkmal": "54001",
+  "sonstige_merkmale.gewaessermerkmal": "55001",
+  "sonstige_merkmale.polder": "55003",
+  "sonstige_merkmale.netzknoten": "56001",
+  "sonstige_merkmale.nullpunkt": "56002",
+  "sonstige_merkmale.wasserspiegelhoehe": "57001",
+  "sonstige_merkmale.gewaesserstationierungsachse": "57003",
+  "sonstige_merkmale.sickerstrecke": "57004",
+};
+
+// The OAR (object-type) part of a leaf's reference, e.g. "42009/5310" -> "42009".
+export function oarOf(cat: Category): string {
+  return CATEGORY_REF[cat].split("/")[0];
+}
+
 // A single official object type (Objektart): either a leaf by itself (no
 // subtype breakdown given in the spec, e.g. "Bahnverkehr") or an umbrella
 // over several subtypes/attribute-values (e.g. "Platz" -> Fußgängerzone,
@@ -283,8 +378,8 @@ export type CategoryBranch =
   | { key: "grund"; groups: CategoryObjectGroup[] };
 
 export const CATEGORY_BRANCHES: CategoryBranch[] = [
-  { key: "spitze", objects: SPITZE_OBJECTS },
   { key: "grund", groups: GRUND_GROUPS },
+  { key: "spitze", objects: SPITZE_OBJECTS },
 ];
 
 // Default selection: exactly the Spitzenaktualisierung leaves. Computed
@@ -318,9 +413,17 @@ export interface Change {
 
 // Token counts for one API call, as reported by the provider — used to
 // estimate the API spend of a run (see lib/models.ts estimateCost).
+// inputTokens is the NON-cached portion only (Anthropic's `input_tokens`
+// already excludes cache hits); cacheWriteTokens/cacheReadTokens break out
+// the cached portion, which is billed at different (write: ~1.25x, read:
+// ~0.1x base input price) rates — see buildSystem's cache_control usage in
+// lib/claude.ts for why most of a run's system-prompt tokens end up here
+// instead of in inputTokens after the first tile.
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
 }
 
 // Display currency for the estimated API cost (§ lib/models.ts) — a user

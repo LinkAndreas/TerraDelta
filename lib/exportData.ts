@@ -3,7 +3,14 @@
 // drag-and-drop with no import wizard needed).
 
 import { changeCenterLonLat } from "./geo";
-import type { Change, GeoRef } from "./types";
+import { CATEGORY_REF, type Category, type Change, type GeoRef } from "./types";
+
+// Official Mini-OK BW catalog reference for a change's category, or "" if
+// the category isn't a recognized catalog leaf (shouldn't happen — kept
+// defensive since exports run on user-facing data).
+function catalogRef(category: string): string {
+  return CATEGORY_REF[category as Category] ?? "";
+}
 
 function triggerDownload(content: string, mimeType: string, filename: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -21,10 +28,10 @@ function csvCell(v: string | number): string {
 }
 
 export function exportCsv(changes: Change[], geo: GeoRef): void {
-  const header = ["id", "category", "change_type", "confidence", "description", "lon", "lat"];
+  const header = ["id", "category", "catalog_ref", "change_type", "confidence", "description", "lon", "lat"];
   const rows = changes.map((c) => {
     const [lon, lat] = changeCenterLonLat(geo, c);
-    return [c.id, c.category, c.change_type, c.confidence, c.description, lon.toFixed(7), lat.toFixed(7)];
+    return [c.id, c.category, catalogRef(c.category), c.change_type, c.confidence, c.description, lon.toFixed(7), lat.toFixed(7)];
   });
   const csv = [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
   triggerDownload(csv, "text/csv;charset=utf-8", `terradelta-changes-${new Date().toISOString().slice(0, 10)}.csv`);
@@ -42,6 +49,7 @@ export function exportGeoJson(changes: Change[], geo: GeoRef): void {
         properties: {
           id: c.id,
           category: c.category,
+          catalog_ref: catalogRef(c.category),
           change_type: c.change_type,
           confidence: c.confidence,
           description: c.description,

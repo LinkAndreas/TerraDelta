@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHANGE_COLORS, confLabel, type Change, type ChangeType, type Confidence, type GeoRef, type SearchArea } from "@/lib/types";
+import {
+  CATEGORY_REF,
+  CHANGE_COLORS,
+  confLabel,
+  type Category,
+  type Change,
+  type ChangeType,
+  type Confidence,
+  type GeoRef,
+  type SearchArea,
+} from "@/lib/types";
 import { useI18n, type StringKey } from "@/lib/i18n";
 
 interface Props {
@@ -216,7 +226,14 @@ export default function ReportTable({
                       {t(`type.${c.change_type}` as StringKey)}
                     </span>
                   </td>
-                  <td>{catLabel(c.category)}</td>
+                  <td>
+                    {catLabel(c.category)}
+                    {CATEGORY_REF[c.category as Category] && (
+                      <span className="muted" style={{ fontSize: 10.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
+                        {CATEGORY_REF[c.category as Category]}
+                      </span>
+                    )}
+                  </td>
                   <td>{c.description}</td>
                   <td>{confLabel(c.confidence)}</td>
                 </tr>

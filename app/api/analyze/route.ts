@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { detectChanges, verifyDetectedChange } from "@/lib/detect";
 import { PROVIDERS, type Provider } from "@/lib/models";
-import { EFFORT_LEVELS, type Effort } from "@/lib/types";
+import { CATEGORIES, EFFORT_LEVELS, type Category, type Effort } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+const CATEGORY_SET = new Set<string>(CATEGORIES as unknown as string[]);
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang, effort, candidate } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, effort, candidate, categories } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -34,6 +36,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Only accept known catalog leaves — anything else (stale client, typo)
+    // is dropped rather than forwarded, since an unrecognized string in the
+    // schema enum would make the request fail outright.
+    const cleanCategories: Category[] | undefined = Array.isArray(categories)
+      ? categories.filter((c): c is Category => typeof c === "string" && CATEGORY_SET.has(c))
+      : undefined;
+
     const common = {
       provider: prov,
       model: typeof model === "string" ? model : "default",
@@ -42,6 +51,7 @@ export async function POST(req: NextRequest) {
       effort: EFFORT_LEVELS.includes(effort) ? (effort as Effort) : undefined,
       reference,
       target,
+      categories: cleanCategories,
     };
 
     // With a candidate, this is a second-pass verification of one detection

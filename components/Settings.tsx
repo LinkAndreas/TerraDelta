@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, type StringKey } from "@/lib/i18n";
 import { EFFORT_LEVELS, SupportedModels, type Currency, type Effort } from "@/lib/types";
@@ -41,6 +41,8 @@ export default function Settings({
   setEffort,
 }: Props) {
   const { t } = useI18n();
+  const [testState, setTestState] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [testMsg, setTestMsg] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -55,97 +57,170 @@ export default function Settings({
 
   const meta = PROVIDERS[provider];
   const hasKey = !!keys[provider]?.trim();
-  const shortName = meta.label.split(" — ")[1] ?? meta.label;
+
+  async function testConnection() {
+    setTestState("testing");
+    setTestMsg("");
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, apiKey: keys[provider] }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestState("error");
+        setTestMsg(t("settings.testError", { err: data.error || res.statusText }));
+        return;
+      }
+      setTestState("ok");
+      setTestMsg(t("settings.testOk", { n: data.models?.length ?? 0 }));
+    } catch (e) {
+      setTestState("error");
+      setTestMsg(t("settings.testError", { err: e instanceof Error ? e.message : String(e) }));
+    }
+  }
+
+  function onKeyChange(value: string) {
+    setKey(provider, value.trim().replace(/[‐-―−]/g, "-"));
+    setTestState("idle");
+    setTestMsg("");
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <strong>⚙ {t("settings.heading")}</strong>
+          <strong style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span aria-hidden style={{ fontSize: 26, lineHeight: 1 }}>⚙</span>
+            {t("settings.topbarLabel")}
+          </strong>
           <button className="icon-btn" onClick={onClose} title={t("common.close")} aria-label={t("common.close")}>
             ✕
           </button>
         </div>
 
         <div className="modal-body">
-          <div title={t("settings.tipModel")}>
-            <div className="field-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>{t("settings.model")}</span>
-              <button 
-                className="icon-btn" 
-                onClick={onRefreshModels} 
-                title="Refresh Models" 
-                disabled={isFetchingModels}
-                style={{ fontSize: 14, opacity: isFetchingModels ? 0.5 : 1 }}
-              >
-                {isFetchingModels ? "..." : "↻"}
-              </button>
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <div className="settings-section-title">{t("settings.section.apiKey")}</div>
+              <div className="settings-section-desc">{t("settings.section.apiKeyDesc")}</div>
             </div>
-            <select value={model} onChange={(e) => setModel(e.target.value)} className="field-select">
-              <option key={"default"} value={"default"}>
-                default
-              </option>
-              {availableModels[provider]?.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          <div title={t("settings.tipKey")}>
-            <div className="field-label">{t("settings.apiKey", { provider: shortName })}</div>
-            <div className="row" style={{ gap: 8 }}>
-              <input
-                type="password"
-                autoComplete="off"
-                placeholder={meta.keyHint}
-                value={keys[provider] ?? ""}
-                onChange={(e) => setKey(provider, e.target.value.trim().replace(/[‐-―−]/g, "-"))}
-                style={{ flex: 1 }}
-              />
-              {hasKey && (
+            <div>
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  placeholder={meta.keyHint}
+                  value={keys[provider] ?? ""}
+                  onChange={(e) => onKeyChange(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                {hasKey && (
+                  <button
+                    className="btn-secondary"
+                    type="button"
+                    onClick={() => onKeyChange("")}
+                    title={t("settings.tipClear")}
+                  >
+                    {t("settings.clear")}
+                  </button>
+                )}
+              </div>
+              {/[^\x20-\x7E]/.test(keys[provider] ?? "") && (
+                <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 6 }}>{t("settings.nonAscii")}</div>
+              )}
+              <div className="field-hint">
+                {t("settings.stored")}{" "}
+                <a href={meta.keysUrl} target="_blank" rel="noreferrer">
+                  {t("settings.getKey")}
+                </a>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
                 <button
                   className="btn-secondary"
                   type="button"
-                  onClick={() => setKey(provider, "")}
-                  title={t("settings.tipClear")}
+                  onClick={testConnection}
+                  disabled={testState === "testing"}
+                  style={{ flexShrink: 0 }}
                 >
-                  {t("settings.clear")}
+                  {testState === "testing" ? t("settings.testing") : t("settings.test")}
                 </button>
-              )}
-            </div>
-            {/[^\x20-\x7E]/.test(keys[provider] ?? "") && (
-              <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 6 }}>{t("settings.nonAscii")}</div>
-            )}
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              {t("settings.stored")}{" "}
-              <a href={meta.keysUrl} target="_blank" rel="noreferrer">
-                {t("settings.getKey")}
-              </a>
+                {testState === "ok" && (
+                  <div style={{ color: "#4ade80", fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>✓ {testMsg}</div>
+                )}
+                {testState === "error" && (
+                  <div style={{ color: "#fca5a5", fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>✕ {testMsg}</div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div title={t("settings.tipCurrency")}>
-            <div className="field-label">{t("settings.currency")}</div>
-            <div className="segmented">
-              <button type="button" aria-pressed={currency === "EUR"} onClick={() => setCurrency("EUR")}>
-                EUR (€)
-              </button>
-              <button type="button" aria-pressed={currency === "USD"} onClick={() => setCurrency("USD")}>
-                USD ($)
-              </button>
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <div className="settings-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>{t("settings.section.model")}</span>
+                <button
+                  className="icon-btn"
+                  onClick={onRefreshModels}
+                  title="Refresh Models"
+                  disabled={isFetchingModels || !hasKey}
+                  style={{ fontSize: 14, opacity: isFetchingModels ? 0.5 : 1 }}
+                >
+                  {isFetchingModels ? "..." : "↻"}
+                </button>
+              </div>
+              <div className="settings-section-desc">{t("settings.section.modelDesc")}</div>
+            </div>
+
+            <div>
+              <select value={model} onChange={(e) => setModel(e.target.value)} className="field-select" disabled={!hasKey}>
+                <option key={"default"} value={"default"}>
+                  default
+                </option>
+                {availableModels[provider]?.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <div className="field-hint">{hasKey ? t("settings.tipModel") : t("settings.modelNeedsKey")}</div>
+            </div>
+
+            <div>
+              <div className="field-label">{t("settings.section.effort")}</div>
+              <div className="field-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+                {t("settings.section.effortDesc")}
+              </div>
+              <div className="segmented">
+                {EFFORT_LEVELS.map((lvl) => (
+                  <button key={lvl} type="button" aria-pressed={effort === lvl} onClick={() => setEffort(lvl)}>
+                    {t(`effort.${lvl}` as StringKey)}
+                  </button>
+                ))}
+              </div>
+              <div className="field-hint">{t(`effort.${effort}.hint` as StringKey)}</div>
             </div>
           </div>
 
-          <div title={t("settings.tipEffort")}>
-            <div className="field-label">{t("settings.effort")}</div>
-            <div className="segmented">
-              {EFFORT_LEVELS.map((lvl) => (
-                <button key={lvl} type="button" aria-pressed={effort === lvl} onClick={() => setEffort(lvl)}>
-                  {t(`effort.${lvl}` as StringKey)}
+          <div className="settings-section">
+            <div className="settings-section-head">
+              <div className="settings-section-title">{t("settings.section.cost")}</div>
+              <div className="settings-section-desc">{t("settings.section.costDesc")}</div>
+            </div>
+
+            <div>
+              <div className="segmented">
+                <button type="button" aria-pressed={currency === "EUR"} onClick={() => setCurrency("EUR")}>
+                  EUR (€)
                 </button>
-              ))}
+                <button type="button" aria-pressed={currency === "USD"} onClick={() => setCurrency("USD")}>
+                  USD ($)
+                </button>
+              </div>
+              <div className="field-hint">{t(`currency.${currency}.hint` as StringKey)}</div>
             </div>
           </div>
         </div>
