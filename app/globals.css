@@ -477,12 +477,23 @@ a {
   max-width: 66%;
 }
 
+/* A fixed height (rather than relying on padding + line-height to land on
+   the same box size) is what actually keeps every topbar button the same
+   height — individual buttons override font-size (the Guide label) or wrap
+   their icon in a bigger span (the Settings gear), either of which grows
+   the content box and desyncs the height if it's left to compute itself.
+   display:inline-flex + centering means those size differences just get
+   centered inside the fixed box instead of changing it. */
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--card);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 9px;
-  padding: 8px 13px;
+  padding: 0 13px;
+  height: 38px;
   font-size: 16px;
   line-height: 1;
 }
@@ -536,11 +547,9 @@ select.lang {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 9px;
-  /* .icon-btn is inline-flex, so ITS height comes from content metrics, not
-     from line-height math — matching padding/font-size alone (above) got
-     close but not pixel-exact. Pinning an explicit height here (measured
-     against the rendered topbar buttons) closes that last gap. */
-  height: 32px;
+  /* Same fixed height as .icon-btn (38px) so every topbar control lines up
+     regardless of each element's own font metrics. */
+  height: 38px;
   padding: 0 32px 0 13px;
   font: inherit;
   font-size: 16px;

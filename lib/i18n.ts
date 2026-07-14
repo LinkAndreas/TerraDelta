@@ -74,6 +74,8 @@ export const STRINGS = {
     "run.needKey": "No API key — click to add one",
     "run.locked": "Locked while running",
     "run.lockedTip": "Images and options can't be changed until the current analysis finishes.",
+    "run.startOver": "Start over",
+    "run.startOverTip": "Clear the images and results to start a fresh comparison.",
     "alert.rateLimit.heading": "API limit reached",
     "alert.rateLimit.body":
       "The provider rejected one or more requests due to a rate limit or usage quota. Wait a moment and try again, or switch to a different API key or model in Settings.",
@@ -498,6 +500,8 @@ export const STRINGS = {
     "run.needKey": "Kein API-Schlüssel — zum Hinzufügen klicken",
     "run.locked": "Gesperrt während der Ausführung",
     "run.lockedTip": "Bilder und Optionen können erst geändert werden, wenn die laufende Analyse abgeschlossen ist.",
+    "run.startOver": "Neu starten",
+    "run.startOverTip": "Bilder und Ergebnisse löschen, um einen neuen Vergleich zu starten.",
     "alert.rateLimit.heading": "API-Limit erreicht",
     "alert.rateLimit.body":
       "Der Anbieter hat eine oder mehrere Anfragen wegen eines Rate-Limits oder Nutzungskontingents abgelehnt. Warten Sie einen Moment und versuchen Sie es erneut, oder wechseln Sie in den Einstellungen zu einem anderen API-Schlüssel oder Modell.",

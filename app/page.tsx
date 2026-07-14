@@ -450,6 +450,29 @@ export default function Home() {
     }
   }
 
+  // Clears everything specific to this comparison run (images, alignment,
+  // results, filters) so the user can start a fresh comparison — but leaves
+  // standing preferences (category selection, provider/model/key, currency,
+  // effort, language, theme) untouched, since those aren't part of "this run".
+  function startOver() {
+    setRefUrl(null);
+    setTargetUrl(null);
+    setRefMeta(null);
+    setTargetMeta(null);
+    setSearchAreaEnabled(false);
+    setSearchArea(null);
+    setAlign(null);
+    setResult(null);
+    setSelectedId(null);
+    setError(null);
+    setRateLimitAlert(false);
+    setTypeFilter({ added: true, removed: true, modified: true });
+    setMinConf("low");
+    setQuery("");
+    setOptionsOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
     <div className="container">
       <div className="topbar">
@@ -475,7 +498,7 @@ export default function Home() {
             onClick={() => setSettingsOpen(true)}
             title={t("settings.tipOpen")}
             aria-label={t("settings.topbarLabel")}
-            style={{ width: 44, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}
+            style={{ width: 44, flex: "0 0 auto" }}
           >
             {/* The gear glyph (U+2699, plain monochrome dingbat) renders
                 visibly smaller than the sun/moon emoji next to it at the
@@ -668,6 +691,12 @@ export default function Home() {
 
       {result && align && (
         <>
+          <div className="row" style={{ justifyContent: "flex-end", marginBottom: 16 }}>
+            <button className="btn-secondary" type="button" onClick={startOver} title={t("run.startOverTip")}>
+              {t("run.startOver")}
+            </button>
+          </div>
+
           {result.summary && (
             <div className="card" style={{ marginBottom: 16 }}>
               <strong>{t("summary.heading")}</strong>
