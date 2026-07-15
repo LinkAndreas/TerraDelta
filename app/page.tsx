@@ -385,10 +385,20 @@ export default function Home() {
               if (!data.genuine) return null;
               const refined = mapToGlobal(crops[i], data.bbox ?? [0, 0, 0, 0]);
               const refinedOk = refined[2] > 0.001 && refined[3] > 0.001;
+              // The verifier judges the crop up close: adopt its corrected
+              // direction (added/removed/modified) when it returned one, and
+              // keep its one-line rationale as the change's `note` — surfaced
+              // in the report, PDF, and data exports.
+              const note = typeof data.reason === "string" ? data.reason.trim() : "";
+              const verifiedType = ["added", "removed", "modified"].includes(data.changeType)
+                ? (data.changeType as ChangeType)
+                : chg.change_type;
               return {
                 ...chg,
+                change_type: verifiedType,
                 confidence: (data.confidence as Confidence) || chg.confidence,
                 bbox: refinedOk ? refined : chg.bbox,
+                note: note || chg.note,
               };
             } catch {
               return chg; // verification unavailable — keep the original detection

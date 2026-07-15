@@ -996,6 +996,12 @@ select.lang:hover {
   cursor: not-allowed;
 }
 
+.dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
 /* Toggle switch */
 .switch {
   position: relative;

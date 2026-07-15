@@ -138,9 +138,12 @@ Judge strictly. REJECT the candidate if:
 
 CONFIRM the candidate if the specific catalog object type it claims genuinely changed as described — including a durable land-use conversion (Vegetation und Landwirtschaft) or a settlement-area conversion (Siedlungsfläche), since those ARE in scope.
 
+On this zoomed crop the direction of the change (added vs. removed vs. modified) is usually far clearer than it was in the coarse detection tile — so also RE-JUDGE the change_type: decide, from the two crops, whether the object was newly present on the LATER image (added), gone on the LATER image (removed), or present on both but structurally altered (modified). Report that as change_type; it may differ from the candidate's stated type if the detector got the direction wrong.
+
 Return:
 - genuine: true or false
 - confidence: certainty about the change if genuine (high = unmistakable, medium = likely, low = possible); use "low" if rejecting
+- change_type: the correct direction of the change ("added" | "removed" | "modified") as judged from these two crops
 - bbox: if genuine, a TIGHT normalized [x, y, width, height] box around the changed object in THIS crop (origin top-left), hugging its actual extent; otherwise [0, 0, 0, 0]
 - reason: one short sentence explaining the verdict.`;
 
@@ -234,6 +237,7 @@ export function buildVerifyResult(
   parsed: {
     genuine?: unknown;
     confidence?: unknown;
+    change_type?: unknown;
     bbox?: unknown;
     reason?: unknown;
   },
@@ -244,6 +248,11 @@ export function buildVerifyResult(
     confidence: CONFS.includes(parsed.confidence as Confidence)
       ? (parsed.confidence as Confidence)
       : "medium",
+    // Only surface a corrected type when it's a valid enum value — otherwise
+    // leave it undefined so the caller keeps the detector's original label.
+    changeType: TYPES.includes(parsed.change_type as ChangeType)
+      ? (parsed.change_type as ChangeType)
+      : undefined,
     bbox: clampBox(parsed.bbox),
     reason: String(parsed.reason ?? ""),
     usage,

@@ -409,6 +409,17 @@ export interface Change {
   // target for the model than a free-form polygon (fewer points to get
   // right, no risk of a self-intersecting or mismatched-scale outline).
   bbox: [number, number, number, number];
+  // Optional enrichment carried alongside the core detection:
+  // • `agreement` — how many independent detection passes (overview / fine /
+  //   quadrant tiles) corroborated this change during dedup. A higher count
+  //   is a no-cost reliability signal: two passes seeing the same object is
+  //   stronger evidence than one, so it also nudges the displayed confidence
+  //   up (see tiles.ts `dedupe`).
+  // • `note` — the second-pass verifier's one-line rationale for why the
+  //   change is genuine (captured from its `reason`). Surfaced in the report,
+  //   PDF, and data exports so a reviewer can see *why* it was confirmed.
+  agreement?: number;
+  note?: string;
 }
 
 // Token counts for one API call, as reported by the provider — used to
@@ -448,6 +459,12 @@ export interface AnalyzeResult {
 export interface VerifyResult {
   genuine: boolean;
   confidence: Confidence;
+  // The verifier judges the candidate on a zoomed-in crop, where added-vs-
+  // removed-vs-modified is often clearer than in the coarse detection tile it
+  // came from. When it disagrees with the detector's label it returns the
+  // corrected type here; the pipeline adopts it (see app/page.tsx). Absent /
+  // undefined means "no correction — keep the detector's change_type".
+  changeType?: ChangeType;
   // Refined tight box in the CROP's normalized coordinates ([0,0,0,0] if rejected).
   bbox: [number, number, number, number];
   reason: string;
