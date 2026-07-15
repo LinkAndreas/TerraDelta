@@ -366,13 +366,14 @@ export const GRUND_GROUPS: CategoryObjectGroup[] = [
   },
 ];
 
-// The two top-level "Oberkategorien" of the category tree — Spitzenaktualität
-// is preselected by default (see defaultSelectedCategories); Grundaktualität
-// starts unselected but is equally always toggleable, since there's no
-// separate locked-preset mode anymore. Note some leaf categories are
-// reachable from both branches (the 12 dual objects) — checking one instance
-// checks the same underlying category the other branch shows, which mirrors
-// the source spec: those objects genuinely belong to both catalogs.
+// The two top-level "Oberkategorien" of the category tree — Grundaktualität
+// (the full 62-object catalog) is preselected by default (see
+// defaultSelectedCategories); Spitzenaktualität's 12 objects are a subset of
+// it and are equally always toggleable, since there's no separate
+// locked-preset mode anymore. Note some leaf categories are reachable from
+// both branches (the 12 dual objects) — checking one instance checks the same
+// underlying category the other branch shows, which mirrors the source spec:
+// those objects genuinely belong to both catalogs.
 export type CategoryBranch =
   | { key: "spitze"; objects: CategoryObject[] }
   | { key: "grund"; groups: CategoryObjectGroup[] };
@@ -382,16 +383,14 @@ export const CATEGORY_BRANCHES: CategoryBranch[] = [
   { key: "spitze", objects: SPITZE_OBJECTS },
 ];
 
-// Default selection: exactly the Spitzenaktualisierung leaves. Computed
-// against SPITZE_OBJECTS directly (not by iterating both branches in order)
-// because 26 of the 76 categories are reachable from BOTH branches — a
-// sequential per-branch overwrite would flip those back to false when the
-// Grundaktualisierung pass ran after Spitzenaktualisierung's.
+// Default selection: the full Grundaktualisierung catalog — i.e. every leaf
+// category (Grundaktualisierung is the all-62-object baseline currency, and
+// Spitzenaktualisierung's 12 objects are already a subset of it, so "all
+// categories" is exactly the Grundaktualität branch fully checked).
 export function defaultSelectedCategories(): Record<Category, boolean> {
-  const spitzeCategories = new Set<Category>(SPITZE_OBJECTS.flatMap((o) => o.categories));
   const result: Partial<Record<Category, boolean>> = {};
   for (const cat of CATEGORIES) {
-    result[cat] = spitzeCategories.has(cat);
+    result[cat] = true;
   }
   return result as Record<Category, boolean>;
 }
