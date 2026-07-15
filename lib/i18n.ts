@@ -199,7 +199,7 @@ export const STRINGS = {
 
     "category.heading": "Change type categories",
     "category.subheading":
-      "Pick whole object types or individual subtypes freely — Spitzenaktualität (priority currency) is preselected below.",
+      "Pick whole object types or individual subtypes freely — the full Grundaktualität catalog is preselected below.",
     "category.groupTip": "Toggles every subtype below at once — individual subtypes stay adjustable.",
     "category.expand": "Show subtypes",
     "category.collapse": "Hide subtypes",
@@ -635,7 +635,7 @@ export const STRINGS = {
 
     "category.heading": "Veränderungstyp-Kategorien",
     "category.subheading":
-      "Ganze Objektarten oder einzelne Unterarten frei auswählen — Spitzenaktualität ist unten vorausgewählt.",
+      "Ganze Objektarten oder einzelne Unterarten frei auswählen — der vollständige Grundaktualität-Katalog ist unten vorausgewählt.",
     "category.groupTip": "Schaltet alle Unterarten darunter gemeinsam um — einzelne Unterarten bleiben anpassbar.",
     "category.expand": "Unterarten anzeigen",
     "category.collapse": "Unterarten verbergen",
