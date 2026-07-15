@@ -4,11 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   CATEGORY_REF,
   CHANGE_COLORS,
-  confLabel,
+  scoreLabel,
   type Category,
   type Change,
   type ChangeType,
-  type Confidence,
   type GeoRef,
   type SearchArea,
 } from "@/lib/types";
@@ -21,8 +20,8 @@ interface Props {
   onSelect: (id: string | null) => void;
   typeFilter: Record<ChangeType, boolean>;
   setTypeFilter: (f: Record<ChangeType, boolean>) => void;
-  minConf: Confidence;
-  setMinConf: (c: Confidence) => void;
+  minScore: number;
+  setMinScore: (s: number) => void;
   query: string;
   setQuery: (q: string) => void;
   refUrl?: string;
@@ -42,8 +41,8 @@ export default function ReportTable({
   onSelect,
   typeFilter,
   setTypeFilter,
-  minConf,
-  setMinConf,
+  minScore,
+  setMinScore,
   query,
   setQuery,
   refUrl,
@@ -201,13 +200,16 @@ export default function ReportTable({
         <label className="row" style={{ gap: 6, fontSize: 14 }} title={t("report.tipMinConf")}>
           <span className="muted">{t("report.minConf")}</span>
           <select
-            value={minConf}
-            onChange={(e) => setMinConf(e.target.value as Confidence)}
+            value={minScore}
+            onChange={(e) => setMinScore(Number(e.target.value))}
             style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 24px 6px 8px", fontSize: 14 }}
           >
-            <option value="low">{t("conf.any")}</option>
-            <option value="medium">{t("conf.mediumPlus")}</option>
-            <option value="high">{t("conf.highOnly")}</option>
+            <option value={0}>{t("conf.any")}</option>
+            <option value={40}>≥ 40%</option>
+            <option value={55}>≥ 55%</option>
+            <option value={70}>≥ 70%</option>
+            <option value={85}>≥ 85%</option>
+            <option value={95}>≥ 95%</option>
           </select>
         </label>
         <input
@@ -268,7 +270,7 @@ export default function ReportTable({
                     )}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    {confLabel(c.confidence)}
+                    {scoreLabel(c.score)}
                     {(c.agreement ?? 1) >= 2 && (
                       <span
                         className="muted"

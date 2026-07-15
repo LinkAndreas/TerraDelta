@@ -45,6 +45,7 @@ interface ChangeRecord {
   catalog_ref: string;
   change_type: ChangeType;
   confidence: string;
+  score: number;
   agreement: number;
   description: string;
   note: string;
@@ -74,6 +75,7 @@ function toRecord(c: Change, geo?: GeoRef | null): ChangeRecord {
     catalog_ref: catalogRef(c.category),
     change_type: c.change_type,
     confidence: c.confidence,
+    score: c.score,
     agreement: c.agreement ?? 1,
     description: c.description,
     note: c.note ?? "",
@@ -103,6 +105,7 @@ function csvString(changes: Change[], geo?: GeoRef | null): string {
     "catalog_ref",
     "change_type",
     "confidence",
+    "confidence_score",
     "agreement",
     "description",
     "note",
@@ -120,6 +123,7 @@ function csvString(changes: Change[], geo?: GeoRef | null): string {
       r.catalog_ref,
       r.change_type,
       r.confidence,
+      r.score,
       r.agreement,
       r.description,
       r.note,
@@ -156,6 +160,7 @@ export function buildGeoJson(changes: Change[], geo: GeoRef): string {
           catalog_ref: r.catalog_ref,
           change_type: r.change_type,
           confidence: r.confidence,
+          confidence_score: r.score,
           agreement: r.agreement,
           description: r.description,
           note: r.note,
@@ -210,7 +215,7 @@ export function buildKml(changes: Change[], geo: GeoRef, lang: Lang): string {
         .join(" ");
       const areaStr = r.area_m2 !== null ? `${Math.round(r.area_m2)} m²` : "";
       const desc = [
-        `${r.catalog_ref} · ${r.change_type} · ${r.confidence}`,
+        `${r.catalog_ref} · ${r.change_type} · ${r.score}%`,
         r.description,
         r.note ? `↳ ${r.note}` : "",
         areaStr,

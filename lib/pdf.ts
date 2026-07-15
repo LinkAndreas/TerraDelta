@@ -1,5 +1,5 @@
 import type { Category, Change, ChangeType, Confidence, GeoRef, SearchArea } from "./types";
-import { CATEGORY_REF, CHANGE_COLORS, confLabel } from "./types";
+import { CATEGORY_REF, CHANGE_COLORS, scoreLabel } from "./types";
 import { changeAreaM2, changeCenterLonLat } from "./geo";
 import { translate, type Lang, type StringKey } from "./i18n";
 
@@ -554,9 +554,9 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
       rm.noteLines.forEach((line, li) => doc.text(line, COL_X.desc + 2, noteY + li * NOTE_LINE_H));
     }
 
-    // Confidence
+    // Confidence (numeric score)
     setFont(doc, "bold", FONT_SIZE_ROW, MID);
-    doc.text(confLabel(c.confidence), COL_X.conf + 2, rowMid);
+    doc.text(scoreLabel(c.score), COL_X.conf + 2, rowMid);
 
     // Bottom border
     doc.setDrawColor(220, 218, 215);

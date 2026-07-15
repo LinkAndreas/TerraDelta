@@ -17,6 +17,7 @@ import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
+  bandFromScore,
   CATEGORIES,
   DEFAULT_EFFORT,
   defaultSelectedCategories,
@@ -25,7 +26,6 @@ import {
   type Category,
   type Change,
   type ChangeType,
-  type Confidence,
   type Currency,
   type Effort,
   type SearchArea,
@@ -43,8 +43,6 @@ const STAGE_KEY: Record<Stage, StringKey> = {
   aligning: "run.aligning",
   analyzing: "run.analyzing",
 };
-
-const CONF_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 
 interface TaskResult {
   changes: Change[];
@@ -97,8 +95,14 @@ export default function Home() {
     removed: true,
     modified: true,
   });
-  const [minConf, setMinConf] = useState<Confidence>("low");
+  const [minScore, setMinScore] = useState<number>(0);
   const [query, setQuery] = useState("");
+
+  // §5: Vegetation/land-use is opt-in (Options toggle). Enabled by default,
+  // consistent with the full-catalog (Grundaktualität) default — when off, the
+  // vegetation_landwirtschaft categories are stripped from the run's scope and
+  // the prompt suppresses that whole theme.
+  const [includeVegetation, setIncludeVegetation] = useState(true);
 
   // Provider / model / API keys / cost-estimate currency / reasoning effort (persisted to localStorage).
   const [provider, setProvider] = useState<Provider>("anthropic");
@@ -205,7 +209,7 @@ export default function Home() {
         ? `⌀ ${Math.round(searchArea.radiusM * 2)} m`
         : `${Math.round(searchArea.widthM)} × ${Math.round(searchArea.heightM)} m`
       : t("options.wholeImage");
-  const optionsSummary = `${categorySummary} · ${areaSummary}`;
+  const optionsSummary = `${categorySummary} · ${areaSummary}${includeVegetation ? "" : ` · ${t("veg.summaryOff")}`}`;
 
   useEffect(() => {
     if (!busy) return;
@@ -219,12 +223,12 @@ export default function Home() {
     const q = query.trim().toLowerCase();
     for (const c of result.changes) {
       if (!typeFilter[c.change_type]) continue;
-      if (CONF_RANK[c.confidence] < CONF_RANK[minConf]) continue;
+      if ((c.score ?? 0) < minScore) continue;
       if (q && !(`${c.description} ${c.category}`.toLowerCase().includes(q))) continue;
       set.add(c.id);
     }
     return set;
-  }, [result, typeFilter, minConf, query]);
+  }, [result, typeFilter, minScore, query]);
 
   async function run() {
     if (!refUrl || !targetUrl) return;
@@ -279,7 +283,11 @@ export default function Home() {
       // discarding the unwanted results afterward (see lib/prompt.ts
       // buildSystem) — cuts noise and misclassification risk on runs
       // restricted to a small subset like Spitzenaktualisierung alone.
-      const enabledCategories = CATEGORIES.filter((c) => selectedCategories[c]);
+      // When vegetation is opted out, drop those categories from scope even if
+      // still checked in the tree, so the model is never asked to report them.
+      const enabledCategories = CATEGORIES.filter(
+        (c) => selectedCategories[c] && (includeVegetation || !c.startsWith("vegetation_landwirtschaft.")),
+      );
 
       const results: TaskResult[] = await runPool<Tile, TaskResult>(
         tasks,
@@ -298,6 +306,7 @@ export default function Home() {
                 lang,
                 effort,
                 categories: enabledCategories,
+                includeVegetation,
               }),
             });
             const data = await res.json();
@@ -393,10 +402,12 @@ export default function Home() {
               const verifiedType = ["added", "removed", "modified"].includes(data.changeType)
                 ? (data.changeType as ChangeType)
                 : chg.change_type;
+              const vScore = typeof data.score === "number" ? data.score : chg.score;
               return {
                 ...chg,
                 change_type: verifiedType,
-                confidence: (data.confidence as Confidence) || chg.confidence,
+                score: vScore,
+                confidence: bandFromScore(vScore),
                 bbox: refinedOk ? refined : chg.bbox,
                 note: note || chg.note,
               };
@@ -477,7 +488,7 @@ export default function Home() {
     setError(null);
     setRateLimitAlert(false);
     setTypeFilter({ added: true, removed: true, modified: true });
-    setMinConf("low");
+    setMinScore(0);
     setQuery("");
     setOptionsOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -636,6 +647,29 @@ export default function Home() {
                 setSelectedCategories={setSelectedCategories}
                 disabled={busy}
               />
+
+              <div
+                className="row"
+                style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 14, marginTop: 4 }}
+              >
+                <div>
+                  <strong style={{ fontSize: 15 }}>{t("veg.heading")}</strong>
+                  <div className="muted" style={{ fontSize: 12.5, marginTop: 3, maxWidth: 480 }}>
+                    {t("veg.subheading")}
+                  </div>
+                </div>
+                <label className="switch" title={t("veg.toggleTip")}>
+                  <input
+                    type="checkbox"
+                    checked={includeVegetation}
+                    disabled={busy}
+                    onChange={(e) => setIncludeVegetation(e.target.checked)}
+                  />
+                  <span className="switch-track">
+                    <span className="switch-thumb" />
+                  </span>
+                </label>
+              </div>
             </div>
           )}
         </div>
@@ -743,8 +777,8 @@ export default function Home() {
             onSelect={setSelectedId}
             typeFilter={typeFilter}
             setTypeFilter={setTypeFilter}
-            minConf={minConf}
-            setMinConf={setMinConf}
+            minScore={minScore}
+            setMinScore={setMinScore}
             query={query}
             setQuery={setQuery}
             refUrl={align.refUrl}
