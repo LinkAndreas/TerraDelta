@@ -101,7 +101,11 @@ export async function anthropicDetect(
 
   const params = {
     model: opts.model,
-    max_tokens: 8000,
+    // A tile dense with changes emits a long region-by-region `analysis`
+    // string followed by many change objects; at 8000 tokens the JSON could
+    // be truncated mid-object (→ a parse failure that loses the whole tile).
+    // 16000 gives ample headroom for the busiest tiles.
+    max_tokens: 16000,
     system: cachedSystem(buildSystem(enabledCategories, { includeVegetation: opts.includeVegetation })),
     output_config: { effort: opts.effort, format: { type: "json_schema", schema: buildSchema(enabledCategories) } },
     messages: [
@@ -135,6 +139,14 @@ export async function anthropicDetect(
   try {
     parsed = JSON.parse(stripFences(raw));
   } catch {
+    // A "max_tokens" stop means the JSON was cut off mid-output — a clearer,
+    // actionable message than a raw-snippet dump. (max_tokens is already
+    // generous; this region was just unusually change-dense.)
+    if (response.stop_reason === "max_tokens") {
+      throw new Error(
+        "The model's response for this region was cut off (token limit reached) before the JSON was complete — this region may be unusually dense with changes. Try a lower reasoning effort, or re-run.",
+      );
+    }
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
   return buildResult(parsed, opts.model, usage);
