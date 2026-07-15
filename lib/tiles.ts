@@ -3,7 +3,7 @@
 // in-frame -> far better recall and localization). Also maps per-tile boxes
 // back to global coordinates and de-duplicates overlapping detections.
 
-import { CATEGORY_REF, type Category, type Change } from "./types";
+import { CATEGORY_REF, type Category, type Change, type Confidence } from "./types";
 
 export interface Tile {
   refUrl: string;
@@ -230,24 +230,52 @@ function oarFamily(category: string): string {
 // an overlapping tile calls it "autohof"), doesn't appear twice. Distinct
 // objects inside an area-scale change (houses within a new "plot") still
 // survive because they belong to unrelated OAR families entirely.
+const CONF_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
+const CONF_BY_RANK: Confidence[] = ["low", "medium", "high"];
+
+// Whether two detections describe the SAME real-world change — the identical
+// predicate the loop below uses to fold a raw detection into a kept cluster.
+function sameChange(k: Change, c: Change): boolean {
+  return (
+    k.change_type === c.change_type &&
+    (iou(k.bbox, c.bbox) > 0.4 ||
+      (oarFamily(k.category) === oarFamily(c.category) && containment(k.bbox, c.bbox) > 0.75))
+  );
+}
+
 export function dedupe(changes: Change[]): Change[] {
-  const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
   const sorted = [...changes].sort(
     (a, b) =>
-      (rank[b.confidence] ?? 0) - (rank[a.confidence] ?? 0) || area(b.bbox) - area(a.bbox),
+      (CONF_RANK[b.confidence] ?? 0) - (CONF_RANK[a.confidence] ?? 0) || area(b.bbox) - area(a.bbox),
   );
 
+  // Each kept entry is the representative (highest-confidence, largest) of a
+  // cluster; `agreement` counts how many raw detections — from independent
+  // overview / fine / quadrant passes — landed in that cluster.
   const kept: Change[] = [];
+  const agreement: number[] = [];
   for (const c of sorted) {
-    const dup = kept.some(
-      (k) =>
-        k.change_type === c.change_type &&
-        (iou(k.bbox, c.bbox) > 0.4 ||
-          (oarFamily(k.category) === oarFamily(c.category) && containment(k.bbox, c.bbox) > 0.75)),
-    );
-    if (!dup) kept.push(c);
+    const idx = kept.findIndex((k) => sameChange(k, c));
+    if (idx === -1) {
+      kept.push(c);
+      agreement.push(1);
+    } else {
+      agreement[idx]++;
+    }
   }
 
-  kept.sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
-  return kept.map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
+  // Consensus boost: a change corroborated by ≥2 independent passes is more
+  // trustworthy than a lone sighting, so lift its confidence one level (never
+  // past "high"). This is a no-cost accuracy signal — it reranks and
+  // recolors the same detections we already have, surfacing the ones multiple
+  // passes agreed on. `agreement` is also carried through for the report/export.
+  const boosted = kept.map((c, i) => {
+    const votes = agreement[i];
+    const lifted =
+      votes >= 2 ? CONF_BY_RANK[Math.min(2, (CONF_RANK[c.confidence] ?? 0) + 1)] : c.confidence;
+    return { ...c, confidence: lifted, agreement: votes };
+  });
+
+  boosted.sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
+  return boosted.map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
 }

@@ -143,6 +143,11 @@ const VERIFY_SCHEMA = {
   properties: {
     genuine: { type: "boolean" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
+    change_type: {
+      type: "string",
+      enum: ["added", "removed", "modified"],
+      description: "Corrected direction of the change as judged from the two crops.",
+    },
     bbox: {
       type: "array",
       items: { type: "number" },
@@ -150,7 +155,7 @@ const VERIFY_SCHEMA = {
     },
     reason: { type: "string" },
   },
-  required: ["genuine", "confidence", "bbox", "reason"],
+  required: ["genuine", "confidence", "change_type", "bbox", "reason"],
 };
 
 export async function anthropicVerify(

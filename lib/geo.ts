@@ -51,6 +51,33 @@ export function changeCenterLonLat(geo: GeoRef, change: Change): [number, number
   return normalizedToLonLat(geo, x + w / 2, y + h / 2);
 }
 
+// The change's bounding box as a closed WGS84 ring (top-left → top-right →
+// bottom-right → bottom-left → back to top-left), for polygon-footprint
+// exports (GeoJSON/KML) that show a change's real extent rather than just its
+// center point. North-up raster assumed, like the rest of this file.
+export function changeBboxRingLonLat(geo: GeoRef, change: Change): [number, number][] {
+  const [x, y, w, h] = change.bbox;
+  const tl = normalizedToLonLat(geo, x, y);
+  const tr = normalizedToLonLat(geo, x + w, y);
+  const br = normalizedToLonLat(geo, x + w, y + h);
+  const bl = normalizedToLonLat(geo, x, y + h);
+  return [tl, tr, br, bl, tl];
+}
+
+// Real-world footprint of a change's bounding box in square meters — a
+// far more meaningful magnitude than the normalized [0..1] box for a
+// reviewer ("a 1,200 m² new building" vs. "w=0.03"). Measured from the box's
+// edges on the ground; north-up raster assumed.
+export function changeAreaM2(geo: GeoRef, change: Change): number {
+  const [x, y, w, h] = change.bbox;
+  const [lonL, latT] = normalizedToLonLat(geo, x, y);
+  const [lonR] = normalizedToLonLat(geo, x + w, y);
+  const [, latB] = normalizedToLonLat(geo, x, y + h);
+  const widthM = metersBetween(latT, lonL, latT, lonR);
+  const heightM = metersBetween(latT, lonL, latB, lonL);
+  return widthM * heightM;
+}
+
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 // Bounding rect (normalized [0..1] image coordinates) of a search area, for

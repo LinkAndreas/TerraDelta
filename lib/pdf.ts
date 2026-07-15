@@ -1,6 +1,6 @@
-import type { Change, GeoRef, SearchArea } from "./types";
-import { CHANGE_COLORS, confLabel } from "./types";
-import { changeCenterLonLat } from "./geo";
+import type { Category, Change, ChangeType, Confidence, GeoRef, SearchArea } from "./types";
+import { CATEGORY_REF, CHANGE_COLORS, confLabel } from "./types";
+import { changeAreaM2, changeCenterLonLat } from "./geo";
 import { translate, type Lang, type StringKey } from "./i18n";
 
 // ── DIN A4 constants (all in mm) ──────────────────────────────────────────
@@ -188,17 +188,52 @@ export function drawPageFooter(doc: Doc, pageNum: number, totalPages: number, t:
   doc.text(t("pdf.page", { n: pageNum, total: totalPages }), PW - M, y, { align: "right" });
 }
 
-// ── Main export ───────────────────────────────────────────────────────────
+// ── Formatting helpers ─────────────────────────────────────────────────────
 
-export async function exportPdf(opts: {
+function localeOf(lang: Lang): string {
+  return lang === "de" ? "de-DE" : "en-GB";
+}
+
+// Real-world footprint, human-readable: m² up to a hectare, then ha.
+export function formatArea(m2: number, lang: Lang): string {
+  const loc = localeOf(lang);
+  if (m2 >= 10000) return `${(m2 / 10000).toLocaleString(loc, { maximumFractionDigits: 2 })} ha`;
+  return `${Math.round(m2).toLocaleString(loc)} m²`;
+}
+
+function localizedCategory(t: (k: StringKey) => string, category: string): string {
+  const key = `cat.${category}` as StringKey;
+  const label = t(key);
+  return label === key ? category : label;
+}
+
+// ── Unified report builder ──────────────────────────────────────────────────
+// Both the standard report (§ exportPdf) and the restricted-area Merkblatt
+// (§6) share the exact same layout; they differ only in two optional inputs:
+//   • `searchArea` present  → draw the search-area info box + use the Merkblatt
+//     title (the restricted-area mode always has georeferencing).
+//   • `geo` present         → the change table gains a Coordinates column
+//     (WGS84 lat/lon of each change's center + its real-world area), and the
+//     page-1 stats band gains a total-area figure. Without geo (a plain
+//     PNG/JPEG comparison) those are simply omitted.
+// Returning the jsPDF doc (rather than saving inline) lets callers either
+// save it or hand its bytes to the combined ZIP export.
+
+export interface PdfBuildOptions {
   refUrl: string;
   targetUrl: string;
   changes: Change[];
   lang: Lang;
-}): Promise<void> {
+  geo?: GeoRef | null;
+  searchArea?: SearchArea | null;
+}
+
+async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
   const { default: jsPDF } = await import("jspdf");
-  const { refUrl, targetUrl, changes, lang } = opts;
+  const { refUrl, targetUrl, changes, lang, geo, searchArea } = opts;
   const t = (key: StringKey, vars?: Record<string, string | number>) => translate(lang, key, vars);
+  const hasCoord = !!geo;
+  const title = searchArea ? t("pdf.merkblattTitle") : t("pdf.title");
 
   // Render assets in parallel
   const PX = 1000;
@@ -208,280 +243,13 @@ export async function exportPdf(opts: {
     renderWithBoxes(targetUrl, changes, PX),
   ]);
 
-  // ── calculate total pages ──────────────────────────────────────────────
-  // Table rows: need to pre-measure line counts
-  const colW = { num: 8, type: 24, cat: 26, conf: 18, desc: CW - 8 - 24 - 26 - 18 };
-  const ROW_PAD = 2.2;
-  const LINE_H = 4.0;
-  const FONT_SIZE_ROW = 8.5;
-
-  // We'll calculate page count properly after we build rows.
-  // Rough estimate first to construct doc, then we'll correct it.
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-  // ── PAGE 1: Images (stacked vertically, one above the other) ────────────
+  // ── PAGE 1: header (+ optional search-area box) + both images ───────────
   const HEADER_H = 26;
-  const imgAreaY = HEADER_H + 10;
+  drawPageHeader(doc, logoPng, false, t, searchArea ? title : undefined);
 
-  // Each image may use at most this much height so both fit on the page:
-  //   available = PH - imgAreaY - gapBetween(8) - legendZone(14) - footerZone(16)
-  //   each slot = available/2, image = slot - labelStrip(7.5) - bottomPad(2)
-  const IMG_MAX_H = Math.floor((PH - imgAreaY - 8 - 14 - 16) / 2) - 10;
-
-  // Fit image within (CW × IMG_MAX_H) preserving aspect ratio
-  function fitInSlot(ar: number): { w: number; h: number; xOff: number } {
-    const hByW = CW / ar;
-    if (hByW <= IMG_MAX_H) return { w: CW, h: hByW, xOff: 0 };
-    const w = IMG_MAX_H * ar;
-    return { w, h: IMG_MAX_H, xOff: (CW - w) / 2 };
-  }
-
-  const ref1 = fitInSlot(refImg.ar);
-  const tgt1 = fitInSlot(tgtImg.ar);
-
-  drawPageHeader(doc, logoPng, false, t);
-
-  // Date line below header bar
-  const dateStr = new Intl.DateTimeFormat(lang === "de" ? "de-DE" : "en-GB", {
-    year: "numeric", month: "long", day: "numeric",
-  }).format(new Date());
-  setFont(doc, "normal", 8, MID);
-  doc.text(t("pdf.generated", { date: dateStr }), PW - M, HEADER_H + 6, { align: "right" });
-
-  function drawImagePanel(
-    label: string, img: { dataUrl: string }, fit: { w: number; h: number; xOff: number }, panelY: number,
-  ) {
-    const panelH = fit.h + 10;
-    // Background
-    doc.setFillColor(...LIGHT_BG);
-    doc.roundedRect(M, panelY, CW, panelH, 2, 2, "F");
-    // Label strip (brand color bar at top of panel)
-    doc.setFillColor(...BRAND);
-    doc.roundedRect(M, panelY, CW, 7, 2, 2, "F");
-    doc.rect(M, panelY + 3, CW, 4, "F"); // square bottom corners of strip
-    setFont(doc, "bold", 8.5, WHITE);
-    doc.text(label, M + CW / 2, panelY + 4.8, { align: "center" });
-    // Image (centered horizontally within the panel)
-    doc.addImage(img.dataUrl, "JPEG", M + fit.xOff + 1, panelY + 7.5, fit.w - 2, fit.h);
-  }
-
-  // Earlier image (top)
-  drawImagePanel(t("pdf.earlier"), refImg, ref1, imgAreaY);
-
-  // Later image (below, with 8 mm gap)
-  const img2Y = imgAreaY + ref1.h + 10 + 8;
-  drawImagePanel(t("pdf.later"), tgtImg, tgt1, img2Y);
-
-  // Legend row below both images
-  const legendY = img2Y + tgt1.h + 10 + 6;
-  const legendTypes: Array<{ key: StringKey; color: string }> = [
-    { key: "type.added", color: CHANGE_COLORS.added },
-    { key: "type.removed", color: CHANGE_COLORS.removed },
-    { key: "type.modified", color: CHANGE_COLORS.modified },
-  ];
-  let lx = M;
-  for (const { key, color } of legendTypes) {
-    const [r, g, b] = hex2rgb(color);
-    doc.setFillColor(r, g, b);
-    doc.roundedRect(lx, legendY - 2.5, 4, 4, 1, 1, "F");
-    setFont(doc, "normal", 8.5, DARK);
-    doc.text(t(key), lx + 5.5, legendY + 0.8);
-    lx += 40;
-  }
-
-  // Change count summary
-  setFont(doc, "normal", 8.5, MID);
-  doc.text(
-    `${changes.length} ${t("pdf.changes").toLowerCase()}`,
-    PW - M,
-    legendY + 0.8,
-    { align: "right" },
-  );
-
-  // ── TABLE PAGES ──────────────────────────────────────────────────────────
-  // Pre-calculate row line counts for pagination
-  const COMPACT_HEADER_H = 20;
-  const TABLE_START_Y_P2 = COMPACT_HEADER_H + 10; // first table page
-  const TABLE_HEADER_H = 8;
-  const PAGE_TABLE_H = PH - TABLE_START_Y_P2 - TABLE_HEADER_H - 14; // available height for rows
-
-  type RowMeta = { lines: string[]; height: number };
-  const rowMetas: RowMeta[] = changes.map((c) => {
-    // We can't call doc.splitTextToSize until doc exists, so use approximate char count
-    // 1 char ≈ 1.8mm at 8.5pt helvetica
-    const approxCharsPerLine = Math.floor(colW.desc / 1.85);
-    const words = c.description.split(" ");
-    const lns: string[] = [];
-    let cur = "";
-    for (const w of words) {
-      if ((cur + (cur ? " " : "") + w).length <= approxCharsPerLine) {
-        cur = cur ? cur + " " + w : w;
-      } else {
-        if (cur) lns.push(cur);
-        cur = w;
-      }
-    }
-    if (cur) lns.push(cur);
-    const lineCount = Math.max(lns.length, 1);
-    return { lines: lns, height: lineCount * LINE_H + ROW_PAD * 2 };
-  });
-
-  // Count table pages
-  let tablePages = 0;
-  let usedH = 0;
-  for (const rm of rowMetas) {
-    if (usedH + rm.height > PAGE_TABLE_H) {
-      tablePages++;
-      usedH = rm.height;
-    } else {
-      usedH += rm.height;
-    }
-  }
-  tablePages++; // final partial page
-
-  const totalPages = 1 + tablePages;
-
-  // Draw footers with correct total now that we know it
-  drawPageFooter(doc, 1, totalPages, t);
-
-  // ── Now render table pages ───────────────────────────────────────────────
-  const COL_X = {
-    num: M,
-    type: M + colW.num,
-    cat: M + colW.num + colW.type,
-    desc: M + colW.num + colW.type + colW.cat,
-    conf: M + colW.num + colW.type + colW.cat + colW.desc,
-  };
-
-  function drawTableHeader(doc: Doc, y: number) {
-    doc.setFillColor(...DARK);
-    doc.rect(M, y, CW, TABLE_HEADER_H, "F");
-    setFont(doc, "bold", 8, WHITE);
-    const mid = y + TABLE_HEADER_H / 2 + 1.2;
-    doc.text(t("th.num"), COL_X.num + colW.num / 2, mid, { align: "center" });
-    doc.text(t("th.type"), COL_X.type + 2, mid);
-    doc.text(t("th.category"), COL_X.cat + 2, mid);
-    doc.text(t("th.description"), COL_X.desc + 2, mid);
-    doc.text(t("th.conf"), COL_X.conf + 2, mid);
-  }
-
-  let pageIdx = 2;
-  let curY = 0;
-  let firstTablePage = true;
-
-  function startTablePage() {
-    doc.addPage();
-    drawPageHeader(doc, logoPng, true, t);
-    let y = COMPACT_HEADER_H + 4;
-
-    if (firstTablePage) {
-      setFont(doc, "bold", 12, DARK);
-      doc.text(t("pdf.changes"), M, y + 5);
-      y += 10;
-      firstTablePage = false;
-    }
-
-    drawTableHeader(doc, y);
-    curY = y + TABLE_HEADER_H;
-    drawPageFooter(doc, pageIdx, totalPages, t);
-    pageIdx++;
-  }
-
-  startTablePage();
-
-  for (let i = 0; i < changes.length; i++) {
-    const c = changes[i];
-    const rm = rowMetas[i];
-
-    // Check if row fits
-    if (curY + rm.height > PH - 14) {
-      startTablePage();
-    }
-
-    // Stripe
-    if (i % 2 === 1) {
-      doc.setFillColor(...TABLE_STRIPE);
-      doc.rect(M, curY, CW, rm.height, "F");
-    }
-
-    const color = hex2rgb(CHANGE_COLORS[c.change_type]);
-    const rowMid = curY + rm.height / 2 + 1.1;
-
-    // # column
-    setFont(doc, "bold", FONT_SIZE_ROW, MID);
-    doc.text(String(i + 1), COL_X.num + colW.num / 2, rowMid, { align: "center" });
-
-    // Type (colored pill background)
-    doc.setFillColor(...color);
-    doc.roundedRect(COL_X.type + 1, curY + rm.height / 2 - 2.5, colW.type - 4, 5, 1.5, 1.5, "F");
-    setFont(doc, "bold", 7.5, WHITE);
-    doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
-
-    // Category (localized — fall back to raw value for unknown categories)
-    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    const catKey = `cat.${c.category}` as StringKey;
-    const catStr = t(catKey) !== catKey ? t(catKey) : c.category;
-    doc.text(catStr, COL_X.cat + 2, rowMid);
-
-    // Description (wrapped)
-    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    const lineCount = rm.lines.length;
-    const blockH = lineCount * LINE_H;
-    const startY = curY + (rm.height - blockH) / 2 + LINE_H * 0.85;
-    rm.lines.forEach((line, li) => {
-      doc.text(line, COL_X.desc + 2, startY + li * LINE_H);
-    });
-
-    // Confidence
-    setFont(doc, "bold", FONT_SIZE_ROW, MID);
-    doc.text(confLabel(c.confidence), COL_X.conf + 2, rowMid);
-
-    // Bottom border
-    doc.setDrawColor(220, 218, 215);
-    doc.setLineWidth(0.15);
-    doc.line(M, curY + rm.height, M + CW, curY + rm.height);
-
-    curY += rm.height;
-  }
-
-  // ── Save ─────────────────────────────────────────────────────────────────
-  const fileDateStr = new Date().toISOString().slice(0, 10);
-  doc.save(`terradelta-report-${fileDateStr}.pdf`);
-}
-
-// ── Digitales Merkblatt (§6) ────────────────────────────────────────────────
-// A focused report for the restricted-search-area mode (§5.1): same visual
-// language as exportPdf, plus the search point/shape/size and a coordinates
-// column per change (only meaningful because this mode requires GeoTIFF
-// input, so `geo` is always available here).
-
-export async function exportMerkblatt(opts: {
-  refUrl: string;
-  targetUrl: string;
-  changes: Change[];
-  lang: Lang;
-  searchArea: SearchArea;
-  geo: GeoRef;
-}): Promise<void> {
-  const { default: jsPDF } = await import("jspdf");
-  const { refUrl, targetUrl, changes, lang, searchArea, geo } = opts;
-  const t = (key: StringKey, vars?: Record<string, string | number>) => translate(lang, key, vars);
-  const title = t("pdf.merkblattTitle");
-
-  const PX = 1000;
-  const [logoPng, refImg, tgtImg] = await Promise.all([
-    svgToPng(LOGO_SVG, 192),
-    renderWithBoxes(refUrl, changes, PX),
-    renderWithBoxes(targetUrl, changes, PX),
-  ]);
-
-  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-
-  // ── PAGE 1: header, search-area info box, both images ──────────────────
-  const HEADER_H = 26;
-  drawPageHeader(doc, logoPng, false, t, title);
-
-  const dateStr = new Intl.DateTimeFormat(lang === "de" ? "de-DE" : "en-GB", {
+  const dateStr = new Intl.DateTimeFormat(localeOf(lang), {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -489,31 +257,35 @@ export async function exportMerkblatt(opts: {
   setFont(doc, "normal", 8, MID);
   doc.text(t("pdf.generated", { date: dateStr }), PW - M, HEADER_H + 6, { align: "right" });
 
-  const infoY = HEADER_H + 10;
-  const infoH = 22;
-  doc.setFillColor(...LIGHT_BG);
-  doc.roundedRect(M, infoY, CW, infoH, 2, 2, "F");
-  doc.setFillColor(...BRAND);
-  doc.roundedRect(M, infoY, CW, 7, 2, 2, "F");
-  doc.rect(M, infoY + 3, CW, 4, "F");
-  setFont(doc, "bold", 8.5, WHITE);
-  doc.text(t("pdf.searchArea"), M + CW / 2, infoY + 4.8, { align: "center" });
+  let imgAreaY = HEADER_H + 10;
 
-  const shapeLabel = t(`search.shape.${searchArea.shape}` as StringKey);
-  const sizeLabel =
-    searchArea.shape === "circle"
-      ? t("pdf.radiusValue", { r: searchArea.radiusM })
-      : t("pdf.rectValue", { w: searchArea.widthM, h: searchArea.heightM });
+  if (searchArea) {
+    const infoY = HEADER_H + 10;
+    const infoH = 22;
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(M, infoY, CW, infoH, 2, 2, "F");
+    doc.setFillColor(...BRAND);
+    doc.roundedRect(M, infoY, CW, 7, 2, 2, "F");
+    doc.rect(M, infoY + 3, CW, 4, "F");
+    setFont(doc, "bold", 8.5, WHITE);
+    doc.text(t("pdf.searchArea"), M + CW / 2, infoY + 4.8, { align: "center" });
 
-  setFont(doc, "normal", 9, DARK);
-  doc.text(
-    `${t("search.lat")}: ${searchArea.lat.toFixed(6)}   ${t("search.lon")}: ${searchArea.lon.toFixed(6)}`,
-    M + 3,
-    infoY + 12,
-  );
-  doc.text(`${shapeLabel} · ${sizeLabel}`, M + 3, infoY + 18);
+    const shapeLabel = t(`search.shape.${searchArea.shape}` as StringKey);
+    const sizeLabel =
+      searchArea.shape === "circle"
+        ? t("pdf.radiusValue", { r: searchArea.radiusM })
+        : t("pdf.rectValue", { w: searchArea.widthM, h: searchArea.heightM });
 
-  const imgAreaY = infoY + infoH + 6;
+    setFont(doc, "normal", 9, DARK);
+    doc.text(
+      `${t("search.lat")}: ${searchArea.lat.toFixed(6)}   ${t("search.lon")}: ${searchArea.lon.toFixed(6)}`,
+      M + 3,
+      infoY + 12,
+    );
+    doc.text(`${shapeLabel} · ${sizeLabel}`, M + 3, infoY + 18);
+    imgAreaY = infoY + infoH + 6;
+  }
+
   const IMG_MAX_H = Math.floor((PH - imgAreaY - 8 - 14 - 16) / 2) - 10;
 
   function fitInSlot(ar: number): { w: number; h: number; xOff: number } {
@@ -547,41 +319,88 @@ export async function exportMerkblatt(opts: {
   const img2Y = imgAreaY + ref1.h + 10 + 8;
   drawImagePanel(t("pdf.later"), tgtImg, tgt1, img2Y);
 
+  // Legend + change count row below both images
   const legendY = img2Y + tgt1.h + 10 + 6;
+  const legendTypes: Array<{ key: StringKey; color: string }> = [
+    { key: "type.added", color: CHANGE_COLORS.added },
+    { key: "type.removed", color: CHANGE_COLORS.removed },
+    { key: "type.modified", color: CHANGE_COLORS.modified },
+  ];
+  let lx = M;
+  for (const { key, color } of legendTypes) {
+    const [r, g, b] = hex2rgb(color);
+    doc.setFillColor(r, g, b);
+    doc.roundedRect(lx, legendY - 2.5, 4, 4, 1, 1, "F");
+    setFont(doc, "normal", 8.5, DARK);
+    doc.text(t(key), lx + 5.5, legendY + 0.8);
+    lx += 40;
+  }
   setFont(doc, "normal", 8.5, MID);
   doc.text(`${changes.length} ${t("pdf.changes").toLowerCase()}`, PW - M, legendY + 0.8, { align: "right" });
 
-  // ── TABLE PAGES (with a coordinates column) ─────────────────────────────
-  const colW = { num: 8, type: 20, cat: 20, coord: 36, conf: 16, desc: CW - 8 - 20 - 20 - 36 - 16 };
+  // ── TABLE ────────────────────────────────────────────────────────────────
+  // Column layout adapts to whether coordinates are available.
+  const colW = {
+    num: 8,
+    type: 20,
+    cat: 26,
+    coord: hasCoord ? 30 : 0,
+    conf: 15,
+    desc: 0,
+  };
+  colW.desc = CW - colW.num - colW.type - colW.cat - colW.coord - colW.conf;
+
   const ROW_PAD = 2.2;
   const LINE_H = 4.0;
+  const NOTE_LINE_H = 3.3;
+  const REF_H = 3.0;
+  const COORD_LINE_H = 3.4;
   const FONT_SIZE_ROW = 8;
+  const FONT_SIZE_NOTE = 6.8;
 
   const COMPACT_HEADER_H = 20;
-  const TABLE_START_Y_P2 = COMPACT_HEADER_H + 10;
   const TABLE_HEADER_H = 8;
+  const STATS_BAND_H = 12;
+  const TABLE_START_Y_P2 = COMPACT_HEADER_H + 10 + STATS_BAND_H;
   const PAGE_TABLE_H = PH - TABLE_START_Y_P2 - TABLE_HEADER_H - 14;
 
-  type RowMeta = { lines: string[]; height: number; coord: string };
+  // Pre-measure every row (accurately — the doc exists, so splitTextToSize
+  // gives true line wraps for the current font size).
+  interface RowMeta {
+    descLines: string[];
+    noteLines: string[];
+    catLines: string[];
+    ref: string;
+    coord: string;
+    area: string;
+    height: number;
+  }
   const rowMetas: RowMeta[] = changes.map((c) => {
-    const approxCharsPerLine = Math.floor(colW.desc / 1.85);
-    const words = c.description.split(" ");
-    const lns: string[] = [];
-    let cur = "";
-    for (const w of words) {
-      if ((cur + (cur ? " " : "") + w).length <= approxCharsPerLine) {
-        cur = cur ? cur + " " + w : w;
-      } else {
-        if (cur) lns.push(cur);
-        cur = w;
-      }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_SIZE_ROW);
+    const descLines: string[] = doc.splitTextToSize(c.description || "", colW.desc - 4);
+    const catLines: string[] = doc.splitTextToSize(localizedCategory(t, c.category), colW.cat - 3);
+    const ref = CATEGORY_REF[c.category as Category] ?? "";
+
+    doc.setFontSize(FONT_SIZE_NOTE);
+    const noteLines: string[] = c.note ? doc.splitTextToSize(`↳ ${c.note}`, colW.desc - 4) : [];
+
+    let coord = "";
+    let area = "";
+    if (geo) {
+      const [lon, lat] = changeCenterLonLat(geo, c);
+      coord = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      area = formatArea(changeAreaM2(geo, c), lang);
     }
-    if (cur) lns.push(cur);
-    const lineCount = Math.max(lns.length, 1);
-    const [lon, lat] = changeCenterLonLat(geo, c);
-    return { lines: lns, height: lineCount * LINE_H + ROW_PAD * 2, coord: `${lat.toFixed(5)}, ${lon.toFixed(5)}` };
+
+    const descBlockH = descLines.length * LINE_H + (noteLines.length ? noteLines.length * NOTE_LINE_H + 1 : 0);
+    const catBlockH = catLines.length * LINE_H + (ref ? REF_H + 0.5 : 0);
+    const coordBlockH = hasCoord ? 2 * COORD_LINE_H : 0;
+    const contentH = Math.max(descBlockH, catBlockH, coordBlockH, 5);
+    return { descLines, noteLines, catLines, ref, coord, area, height: contentH + ROW_PAD * 2 };
   });
 
+  // Count table pages
   let tablePages = 0;
   let usedH = 0;
   for (const rm of rowMetas) {
@@ -592,7 +411,7 @@ export async function exportMerkblatt(opts: {
       usedH += rm.height;
     }
   }
-  tablePages++;
+  tablePages++; // final partial page
 
   const totalPages = 1 + tablePages;
   drawPageFooter(doc, 1, totalPages, t);
@@ -614,9 +433,45 @@ export async function exportMerkblatt(opts: {
     doc.text(t("th.num"), COL_X.num + colW.num / 2, mid, { align: "center" });
     doc.text(t("th.type"), COL_X.type + 2, mid);
     doc.text(t("th.category"), COL_X.cat + 2, mid);
-    doc.text(t("th.coordinates"), COL_X.coord + 2, mid);
+    if (hasCoord) doc.text(t("th.coordinates"), COL_X.coord + 2, mid);
     doc.text(t("th.description"), COL_X.desc + 2, mid);
     doc.text(t("th.conf"), COL_X.conf + 2, mid);
+  }
+
+  // Summary-stats band (first table page only): counts by type + confidence,
+  // corroboration, and (with geo) total changed area — the "meaningful info"
+  // a reviewer wants at a glance.
+  function drawStatsBand(y: number) {
+    const byType: Record<ChangeType, number> = { added: 0, removed: 0, modified: 0 };
+    const byConf: Record<Confidence, number> = { low: 0, medium: 0, high: 0 };
+    let corroborated = 0;
+    let totalArea = 0;
+    for (const c of changes) {
+      byType[c.change_type]++;
+      byConf[c.confidence]++;
+      if ((c.agreement ?? 1) >= 2) corroborated++;
+      if (geo) totalArea += changeAreaM2(geo, c);
+    }
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(M, y, CW, STATS_BAND_H, 2, 2, "F");
+
+    const parts = [
+      `${t("type.added")}: ${byType.added}`,
+      `${t("type.removed")}: ${byType.removed}`,
+      `${t("type.modified")}: ${byType.modified}`,
+    ];
+    setFont(doc, "normal", 8, DARK);
+    doc.text(parts.join("   ·   "), M + 3, y + 4.6);
+
+    const line2 = [
+      `${t("pdf.statHigh")}: ${byConf.high}`,
+      `${t("pdf.statMedium")}: ${byConf.medium}`,
+      `${t("pdf.statLow")}: ${byConf.low}`,
+      `${t("pdf.statCorroborated")}: ${corroborated}`,
+    ];
+    if (geo) line2.push(`${t("pdf.statTotalArea")}: ${formatArea(totalArea, lang)}`);
+    setFont(doc, "normal", 8, MID);
+    doc.text(line2.join("   ·   "), M + 3, y + 9.4);
   }
 
   let pageIdx = 2;
@@ -625,13 +480,15 @@ export async function exportMerkblatt(opts: {
 
   function startTablePage() {
     doc.addPage();
-    drawPageHeader(doc, logoPng, true, t, title);
+    drawPageHeader(doc, logoPng, true, t, searchArea ? title : undefined);
     let y = COMPACT_HEADER_H + 4;
 
     if (firstTablePage) {
       setFont(doc, "bold", 12, DARK);
       doc.text(t("pdf.changes"), M, y + 5);
-      y += 10;
+      y += 9;
+      drawStatsBand(y);
+      y += STATS_BAND_H + 3;
       firstTablePage = false;
     }
 
@@ -658,34 +515,50 @@ export async function exportMerkblatt(opts: {
 
     const color = hex2rgb(CHANGE_COLORS[c.change_type]);
     const rowMid = curY + rm.height / 2 + 1.1;
+    const topY = curY + ROW_PAD + LINE_H * 0.72;
 
+    // # column
     setFont(doc, "bold", FONT_SIZE_ROW, MID);
     doc.text(String(i + 1), COL_X.num + colW.num / 2, rowMid, { align: "center" });
 
+    // Type (colored pill)
     doc.setFillColor(...color);
     doc.roundedRect(COL_X.type + 1, curY + rm.height / 2 - 2.5, colW.type - 4, 5, 1.5, 1.5, "F");
     setFont(doc, "bold", 7, WHITE);
     doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
 
+    // Category (localized, wrapped) + catalog ref beneath
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    const catKey = `cat.${c.category}` as StringKey;
-    const catStr = t(catKey) !== catKey ? t(catKey) : c.category;
-    doc.text(catStr, COL_X.cat + 2, rowMid);
+    rm.catLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, topY + li * LINE_H));
+    if (rm.ref) {
+      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
+      doc.text(rm.ref, COL_X.cat + 2, topY + rm.catLines.length * LINE_H + REF_H - 0.6);
+    }
 
-    setFont(doc, "normal", 7, DARK);
-    doc.text(rm.coord, COL_X.coord + 2, rowMid);
+    // Coordinates (center lat/lon + real-world area)
+    if (hasCoord) {
+      setFont(doc, "normal", 7, DARK);
+      doc.text(rm.coord, COL_X.coord + 2, topY);
+      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
+      doc.text(rm.area, COL_X.coord + 2, topY + COORD_LINE_H);
+    }
 
+    // Description (wrapped) + verifier note beneath
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    const lineCount = rm.lines.length;
-    const blockH = lineCount * LINE_H;
-    const startY = curY + (rm.height - blockH) / 2 + LINE_H * 0.85;
-    rm.lines.forEach((line, li) => {
-      doc.text(line, COL_X.desc + 2, startY + li * LINE_H);
-    });
+    rm.descLines.forEach((line, li) => doc.text(line, COL_X.desc + 2, topY + li * LINE_H));
+    if (rm.noteLines.length) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(FONT_SIZE_NOTE);
+      doc.setTextColor(...MID);
+      const noteY = topY + rm.descLines.length * LINE_H + 0.6;
+      rm.noteLines.forEach((line, li) => doc.text(line, COL_X.desc + 2, noteY + li * NOTE_LINE_H));
+    }
 
+    // Confidence
     setFont(doc, "bold", FONT_SIZE_ROW, MID);
     doc.text(confLabel(c.confidence), COL_X.conf + 2, rowMid);
 
+    // Bottom border
     doc.setDrawColor(220, 218, 215);
     doc.setLineWidth(0.15);
     doc.line(M, curY + rm.height, M + CW, curY + rm.height);
@@ -693,6 +566,45 @@ export async function exportMerkblatt(opts: {
     curY += rm.height;
   }
 
-  const fileDateStr = new Date().toISOString().slice(0, 10);
-  doc.save(`terradelta-merkblatt-${fileDateStr}.pdf`);
+  return doc;
+}
+
+// ── Public entry points ─────────────────────────────────────────────────────
+
+export async function exportPdf(opts: {
+  refUrl: string;
+  targetUrl: string;
+  changes: Change[];
+  lang: Lang;
+  geo?: GeoRef | null;
+}): Promise<void> {
+  const doc = await buildPdf(opts);
+  doc.save(`terradelta-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// Digitales Merkblatt (§6): the restricted-search-area report — same builder,
+// with the search-area info box and (always-present) georeferencing.
+export async function exportMerkblatt(opts: {
+  refUrl: string;
+  targetUrl: string;
+  changes: Change[];
+  lang: Lang;
+  searchArea: SearchArea;
+  geo: GeoRef;
+}): Promise<void> {
+  const doc = await buildPdf(opts);
+  doc.save(`terradelta-merkblatt-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// Report bytes for the combined ZIP export (§ exportData.exportAll) — same
+// document as exportPdf, returned as a Blob instead of triggering a download.
+export async function buildReportBlob(opts: {
+  refUrl: string;
+  targetUrl: string;
+  changes: Change[];
+  lang: Lang;
+  geo?: GeoRef | null;
+}): Promise<Blob> {
+  const doc = await buildPdf(opts);
+  return doc.output("blob");
 }

@@ -78,14 +78,13 @@ export default function ReportTable({
     setExporting(true);
     try {
       const { exportPdf } = await import("@/lib/pdf");
-      await exportPdf({ refUrl, targetUrl, changes, lang });
+      await exportPdf({ refUrl, targetUrl, changes: visibleChanges, lang, geo: refGeo });
     } finally {
       setExporting(false);
     }
   }
 
   async function handleExportCsv() {
-    if (!refGeo) return;
     setMenuOpen(false);
     const { exportCsv } = await import("@/lib/exportData");
     exportCsv(visibleChanges, refGeo);
@@ -96,6 +95,25 @@ export default function ReportTable({
     setMenuOpen(false);
     const { exportGeoJson } = await import("@/lib/exportData");
     exportGeoJson(visibleChanges, refGeo);
+  }
+
+  async function handleExportKml() {
+    if (!refGeo) return;
+    setMenuOpen(false);
+    const { exportKml } = await import("@/lib/exportData");
+    exportKml(visibleChanges, refGeo, lang);
+  }
+
+  async function handleExportAll() {
+    if (!refUrl || !targetUrl || exporting) return;
+    setMenuOpen(false);
+    setExporting(true);
+    try {
+      const { exportAll } = await import("@/lib/exportData");
+      await exportAll({ changes: visibleChanges, refUrl, targetUrl, lang, geo: refGeo });
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function handleExportMerkblatt() {
@@ -145,17 +163,24 @@ export default function ReportTable({
               <button className="dropdown-item" onClick={handleExportPdf} disabled={!refUrl || !targetUrl} title={t("report.tipExportPdf")}>
                 {t("report.exportPdf")}
               </button>
-              <button className="dropdown-item" onClick={handleExportCsv} disabled={!refGeo} title={refGeo ? t("report.tipExportCsv") : t("report.needsGeoTiffForExport")}>
+              <button className="dropdown-item" onClick={handleExportCsv} title={t("report.tipExportCsv")}>
                 {t("report.exportCsv")}
               </button>
               <button className="dropdown-item" onClick={handleExportGeoJson} disabled={!refGeo} title={refGeo ? t("report.tipExportGeoJson") : t("report.needsGeoTiffForExport")}>
                 {t("report.exportGeoJson")}
+              </button>
+              <button className="dropdown-item" onClick={handleExportKml} disabled={!refGeo} title={refGeo ? t("report.tipExportKml") : t("report.needsGeoTiffForExport")}>
+                {t("report.exportKml")}
               </button>
               {merkblattArea && refGeo && (
                 <button className="dropdown-item" onClick={handleExportMerkblatt} title={t("report.tipExportMerkblatt")}>
                   {t("report.exportMerkblatt")}
                 </button>
               )}
+              <div className="dropdown-divider" role="separator" />
+              <button className="dropdown-item" onClick={handleExportAll} disabled={!refUrl || !targetUrl} title={t("report.tipExportAll")}>
+                {t("report.exportAll")}
+              </button>
             </div>
           )}
         </div>
@@ -234,8 +259,26 @@ export default function ReportTable({
                       </span>
                     )}
                   </td>
-                  <td>{c.description}</td>
-                  <td>{confLabel(c.confidence)}</td>
+                  <td>
+                    {c.description}
+                    {c.note && (
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 3, fontStyle: "italic" }}>
+                        ↳ {c.note}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {confLabel(c.confidence)}
+                    {(c.agreement ?? 1) >= 2 && (
+                      <span
+                        className="muted"
+                        title={t("report.corroborated", { n: c.agreement ?? 2 })}
+                        style={{ marginLeft: 5, fontSize: 10.5, fontVariantNumeric: "tabular-nums" }}
+                      >
+                        ·{c.agreement}×
+                      </span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
