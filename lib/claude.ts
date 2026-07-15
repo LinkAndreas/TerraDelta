@@ -34,9 +34,7 @@ function buildSchema(enabledCategories: readonly Category[]) {
             description: { type: "string" },
             confidence: {
               type: "integer",
-              minimum: 0,
-              maximum: 100,
-              description: "How certain the change is genuine, 0-100 (use the full range, not just round buckets).",
+              description: "How certain the change is genuine, an integer from 0 to 100 (use the full range, not just round buckets).",
             },
             bbox: {
               type: "array",
@@ -149,9 +147,7 @@ const VERIFY_SCHEMA = {
     genuine: { type: "boolean" },
     confidence: {
       type: "integer",
-      minimum: 0,
-      maximum: 100,
-      description: "How certain the change is genuine, 0-100.",
+      description: "How certain the change is genuine, an integer from 0 to 100.",
     },
     change_type: {
       type: "string",
