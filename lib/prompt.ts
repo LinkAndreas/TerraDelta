@@ -1,12 +1,12 @@
 // Shared prompt + parsing helpers for the detection/verification pipeline.
 
 import {
+  bandFromScore,
   CATEGORIES,
   type AnalyzeResult,
   type Category,
   type Change,
   type ChangeType,
-  type Confidence,
   type TokenUsage,
   type VerifyResult,
 } from "./types";
@@ -84,9 +84,11 @@ DISAMBIGUATION — ONE change, ONE category, even when several object types tech
 
 DISAMBIGUATION — a few catalog entries cover two named things under ONE code: "Raststätte, Autohof" (rest stop and truck stop share one type), "Hochbahn, Hochstraße" (elevated railway and elevated road share one type), and "Tunnel, Unterführung" (tunnel and underpass share one type). Where this app's category list splits such a pair into two separate reportable categories (e.g. "platz.raststaette" vs "platz.autohof"), pick whichever of the two names the pair's OWN description matches (truck stop → autohof, highway rest stop → raststaette; railway on the elevated structure → hochbahn, road on it → hochstrasse; passage under the ground → tunnel, passage under another route → unterfuehrung) — don't report both for the same object.
 
-OUTPUT per change: category (EXACTLY one of the strings above), change_type (added/removed/modified), a concise description of what changed, confidence (high = unmistakable, medium = likely, low = possible), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context.
+OUTPUT per change: category (EXACTLY one of the strings above), change_type (added/removed/modified), a concise description of what changed, confidence (an INTEGER 0-100 estimating how certain you are the change is genuine: 0 = pure guess, 100 = unmistakable — use the FULL range and pick a specific value like 47, 63, 78, 92, not just round buckets; roughly: 85-100 unmistakable, 55-84 likely, below 55 possible-but-uncertain), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context.
 
-Be thorough — list EVERY genuine change to a catalog object type, including small ones (a single new parking lot, a single mast, a short driveway). The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is genuine, include it with confidence "low" rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes to object types outside this catalog, and never invent changes where only lighting, season, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
+HIGH-PRIORITY, COMMONLY-MISSED AREA CHANGES — do not overlook these: a new residential development ("Neubaugebiet" → siedlungsflaeche.wohnbauflaeche) where former fields/meadows now show streets, parcels, and house shells; and new commercial/industrial buildings or halls ("Gewerbebauten" → siedlungsflaeche.industrie_gewerbeflaeche) — large roofs, logistics halls, or a whole new business park where there was open land. These often span several grid cells, so judge them at the whole-area level, not just cell by cell, and report the added area even when it's only partially inside your current view.
+
+Be thorough — list EVERY genuine change to a catalog object type, including small ones (a single new parking lot, a single mast, a short driveway). The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is genuine, include it with a low confidence score (e.g. 25-45) rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes to object types outside this catalog, and never invent changes where only lighting, season, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
 
 Always reason region by region first, then output the changes — but keep that reasoning brief: a short clause per region actually worth mentioning (skip regions with nothing notable rather than narrating "no change here" for each one), not a full paragraph per grid cell. This image may be one of dozens analyzed in the same run, so terse, high-signal reasoning matters as much as thoroughness in the final changes list.`;
 
@@ -112,8 +114,27 @@ function scopeClause(enabledCategories: readonly Category[]): string {
   );
 }
 
-export function buildSystem(enabledCategories: readonly Category[]): string {
-  return CATALOG_SYSTEM + scopeClause(enabledCategories);
+// Vegetation/land-use (Vegetation und Landwirtschaft) is opt-in via the
+// Options toggle. When included, we actively want durable land-cover changes
+// (clearing, afforestation, a meadow built over) surfaced — countering the
+// catalog's strong default bias against anything vegetation-related; when
+// excluded, we suppress that whole theme entirely so it can't add noise.
+function vegetationClause(includeVegetation: boolean): string {
+  if (includeVegetation) {
+    return (
+      "\n\nVEGETATION IS IN SCOPE FOR THIS RUN: actively report durable Vegetation und Landwirtschaft land-cover conversions — forest cleared to field or built-up, farmland turned to forest/scrub, a meadow permanently developed, a durable change of land-cover TYPE. Be generous with these (a genuine conversion is wanted even at medium/low confidence). Still exclude PURELY seasonal/single-cycle differences (leaf-on/off, a different crop or growth stage on the SAME cover) — those are never a change."
+    );
+  }
+  return (
+    "\n\nVEGETATION IS OUT OF SCOPE FOR THIS RUN: do NOT report any Vegetation und Landwirtschaft change (agriculture, forest, copse, heath, moor, swamp, wasteland) at all — treat that entire theme as outside the catalog for this run, even for an obvious durable land-cover conversion."
+  );
+}
+
+export function buildSystem(
+  enabledCategories: readonly Category[],
+  opts?: { includeVegetation?: boolean },
+): string {
+  return CATALOG_SYSTEM + scopeClause(enabledCategories) + vegetationClause(opts?.includeVegetation ?? true);
 }
 
 // Second-pass verifier: judges ONE candidate change on a zoomed-in crop.
@@ -142,7 +163,7 @@ On this zoomed crop the direction of the change (added vs. removed vs. modified)
 
 Return:
 - genuine: true or false
-- confidence: certainty about the change if genuine (high = unmistakable, medium = likely, low = possible); use "low" if rejecting
+- confidence: an INTEGER 0-100 for how certain you are the change is genuine (85-100 unmistakable, 55-84 likely, below 55 possible); use a low value (e.g. 20) if rejecting
 - change_type: the correct direction of the change ("added" | "removed" | "modified") as judged from these two crops
 - bbox: if genuine, a TIGHT normalized [x, y, width, height] box around the changed object in THIS crop (origin top-left), hugging its actual extent; otherwise [0, 0, 0, 0]
 - reason: one short sentence explaining the verdict.`;
@@ -163,7 +184,7 @@ export const JSON_INSTRUCTION = `Return ONLY a JSON object (no markdown, no comm
       "category": one of ${JSON.stringify(CATEGORIES)},
       "change_type": "added" | "removed" | "modified",
       "description": "what changed",
-      "confidence": "low" | "medium" | "high",
+      "confidence": <integer 0-100>,
       "bbox": [x, y, width, height]
     }
   ]
@@ -172,7 +193,7 @@ The bbox is normalized 0..1 with origin at the top-left of THIS image. If nothin
 
 export function languageInstruction(lang?: string): string {
   if (lang === "de") {
-    return " Write the 'description' and 'summary' field values in German (Deutsch). Keep 'category', 'change_type' and 'confidence' as the exact English enum values.";
+    return " Write the 'description' and 'summary' field values in German (Deutsch). Keep 'category' and 'change_type' as the exact English enum values, and 'confidence' as an integer 0-100.";
   }
   return "";
 }
@@ -205,10 +226,22 @@ function clampBox(b: unknown): [number, number, number, number] {
 
 const CATEGORY_SET: Set<string> = new Set(CATEGORIES as unknown as string[]);
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
-const CONFS: Confidence[] = ["low", "medium", "high"];
+
+// Coerce the model's confidence into an integer 0..100. Defends against a
+// non-number, an out-of-range value, or a legacy "low"/"medium"/"high" string
+// (mapped to a representative score) so older cached shapes still parse.
+function clampScore(v: unknown): number {
+  if (typeof v === "string") {
+    const legacy: Record<string, number> = { low: 35, medium: 65, high: 90 };
+    if (v in legacy) return legacy[v];
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 65;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
 
 export function buildResult(
-  parsed: { summary?: string; changes?: Partial<Change>[] },
+  parsed: { summary?: string; changes?: Array<Record<string, unknown>> },
   model: string,
   usage: TokenUsage,
 ): AnalyzeResult {
@@ -218,18 +251,20 @@ export function buildResult(
   // this via the schema enum; this is a defensive backstop.
   const changes: Change[] = (parsed.changes ?? [])
     .filter((c) => CATEGORY_SET.has(String(c.category)))
-    .map((c, i) => ({
-      id: `chg-${i + 1}`,
-      category: String(c.category),
-      change_type: TYPES.includes(c.change_type as ChangeType)
-        ? (c.change_type as ChangeType)
-        : "modified",
-      description: String(c.description ?? ""),
-      confidence: CONFS.includes(c.confidence as Confidence)
-        ? (c.confidence as Confidence)
-        : "medium",
-      bbox: clampBox(c.bbox),
-    }));
+    .map((c, i) => {
+      const score = clampScore(c.confidence);
+      return {
+        id: `chg-${i + 1}`,
+        category: String(c.category),
+        change_type: TYPES.includes(c.change_type as ChangeType)
+          ? (c.change_type as ChangeType)
+          : "modified",
+        description: String(c.description ?? ""),
+        score,
+        confidence: bandFromScore(score),
+        bbox: clampBox(c.bbox),
+      };
+    });
   return { changes, summary: parsed.summary ?? "", model, usage };
 }
 
@@ -243,11 +278,11 @@ export function buildVerifyResult(
   },
   usage: TokenUsage,
 ): VerifyResult {
+  const score = clampScore(parsed.confidence);
   return {
     genuine: parsed.genuine === true,
-    confidence: CONFS.includes(parsed.confidence as Confidence)
-      ? (parsed.confidence as Confidence)
-      : "medium",
+    score,
+    confidence: bandFromScore(score),
     // Only surface a corrected type when it's a valid enum value — otherwise
     // leave it undefined so the caller keeps the detector's original label.
     changeType: TYPES.includes(parsed.change_type as ChangeType)

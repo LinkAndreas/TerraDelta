@@ -197,6 +197,11 @@ export const STRINGS = {
     "options.tipCollapse": "Hide options",
     "options.categoriesCount": "{n} of {total} categories",
 
+    "veg.heading": "Include vegetation changes",
+    "veg.subheading": "Report durable land-cover changes (forest cleared, farmland afforested, a meadow built over). Turn off to suppress the whole vegetation/agriculture theme and its seasonal noise.",
+    "veg.toggleTip": "Include or exclude Vegetation und Landwirtschaft (land-cover) changes.",
+    "veg.summaryOff": "no vegetation",
+
     "category.heading": "Change type categories",
     "category.subheading":
       "Pick whole object types or individual subtypes freely — the full Grundaktualität catalog is preselected below.",
@@ -632,6 +637,11 @@ export const STRINGS = {
     "options.tipExpand": "Optionen für Suchgebiet und Kategorien anzeigen",
     "options.tipCollapse": "Optionen ausblenden",
     "options.categoriesCount": "{n} von {total} Kategorien",
+
+    "veg.heading": "Vegetative Änderungen einbeziehen",
+    "veg.subheading": "Dauerhafte Landbedeckungsänderungen melden (Wald gerodet, Acker aufgeforstet, Wiese überbaut). Ausschalten, um das gesamte Thema Vegetation/Landwirtschaft samt saisonalem Rauschen zu unterdrücken.",
+    "veg.toggleTip": "Änderungen der Vegetation und Landwirtschaft (Landbedeckung) ein- oder ausschließen.",
+    "veg.summaryOff": "ohne Vegetation",
 
     "category.heading": "Veränderungstyp-Kategorien",
     "category.subheading":

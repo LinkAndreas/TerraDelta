@@ -11,7 +11,7 @@ const CATEGORY_SET = new Set<string>(CATEGORIES as unknown as string[]);
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang, effort, candidate, categories } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, effort, candidate, categories, includeVegetation } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       reference,
       target,
       categories: cleanCategories,
+      includeVegetation: includeVegetation !== false, // default true
     };
 
     // With a candidate, this is a second-pass verification of one detection

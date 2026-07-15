@@ -3,7 +3,7 @@
 // in-frame -> far better recall and localization). Also maps per-tile boxes
 // back to global coordinates and de-duplicates overlapping detections.
 
-import { CATEGORY_REF, type Category, type Change, type Confidence } from "./types";
+import { bandFromScore, CATEGORY_REF, type Category, type Change } from "./types";
 
 export interface Tile {
   refUrl: string;
@@ -230,8 +230,11 @@ function oarFamily(category: string): string {
 // an overlapping tile calls it "autohof"), doesn't appear twice. Distinct
 // objects inside an area-scale change (houses within a new "plot") still
 // survive because they belong to unrelated OAR families entirely.
-const CONF_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
-const CONF_BY_RANK: Confidence[] = ["low", "medium", "high"];
+// Consensus bonus added to a change's 0..100 score per corroborating pass
+// beyond the first (capped), plus the overall cap.
+const CONSENSUS_BONUS_PER_VOTE = 6;
+const CONSENSUS_BONUS_MAX = 15;
+const SCORE_CAP = 99;
 
 // Whether two detections describe the SAME real-world change — the identical
 // predicate the loop below uses to fold a raw detection into a kept cluster.
@@ -245,11 +248,10 @@ function sameChange(k: Change, c: Change): boolean {
 
 export function dedupe(changes: Change[]): Change[] {
   const sorted = [...changes].sort(
-    (a, b) =>
-      (CONF_RANK[b.confidence] ?? 0) - (CONF_RANK[a.confidence] ?? 0) || area(b.bbox) - area(a.bbox),
+    (a, b) => (b.score ?? 0) - (a.score ?? 0) || area(b.bbox) - area(a.bbox),
   );
 
-  // Each kept entry is the representative (highest-confidence, largest) of a
+  // Each kept entry is the representative (highest-score, largest) of a
   // cluster; `agreement` counts how many raw detections — from independent
   // overview / fine / quadrant passes — landed in that cluster.
   const kept: Change[] = [];
@@ -265,15 +267,16 @@ export function dedupe(changes: Change[]): Change[] {
   }
 
   // Consensus boost: a change corroborated by ≥2 independent passes is more
-  // trustworthy than a lone sighting, so lift its confidence one level (never
-  // past "high"). This is a no-cost accuracy signal — it reranks and
-  // recolors the same detections we already have, surfacing the ones multiple
-  // passes agreed on. `agreement` is also carried through for the report/export.
+  // trustworthy than a lone sighting, so nudge its numeric score up (a few
+  // points per extra vote, capped) and recompute its band. This is a no-cost
+  // accuracy signal — it reranks and recolors the detections we already have,
+  // surfacing the ones multiple passes agreed on. `agreement` is carried
+  // through for the report/export.
   const boosted = kept.map((c, i) => {
     const votes = agreement[i];
-    const lifted =
-      votes >= 2 ? CONF_BY_RANK[Math.min(2, (CONF_RANK[c.confidence] ?? 0) + 1)] : c.confidence;
-    return { ...c, confidence: lifted, agreement: votes };
+    const bonus = Math.min(CONSENSUS_BONUS_MAX, (votes - 1) * CONSENSUS_BONUS_PER_VOTE);
+    const score = Math.min(SCORE_CAP, (c.score ?? 0) + bonus);
+    return { ...c, score, confidence: bandFromScore(score), agreement: votes };
   });
 
   boosted.sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);

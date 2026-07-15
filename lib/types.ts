@@ -400,6 +400,12 @@ export interface Change {
   category: string;
   change_type: ChangeType;
   description: string;
+  // Numeric confidence 0..100 — the finer gradation the model now emits per
+  // change (e.g. 55, 72, 88), rather than only three buckets. `confidence`
+  // below is the coarse band derived from it (see `bandFromScore`), kept for
+  // color-coding, stats grouping, and dedup ranking; `score` is what the user
+  // actually sees and filters on.
+  score: number;
   confidence: Confidence;
   // Normalized bounding box on the aligned reference image:
   // [x, y, width, height], each in 0..1, origin top-left. This is the sole
@@ -457,6 +463,9 @@ export interface AnalyzeResult {
 // judged on a zoomed-in crop around the detection.
 export interface VerifyResult {
   genuine: boolean;
+  // Numeric 0..100, re-judged on the zoomed crop (the pipeline recomputes the
+  // coarse band from it — see bandFromScore).
+  score: number;
   confidence: Confidence;
   // The verifier judges the candidate on a zoomed-in crop, where added-vs-
   // removed-vs-modified is often clearer than in the coarse detection tile it
@@ -480,6 +489,17 @@ export const CHANGE_COLORS: Record<ChangeType, string> = {
 
 export const CONF_PCT: Record<Confidence, number> = { low: 35, medium: 65, high: 90 };
 export const confLabel = (c: Confidence): string => `${CONF_PCT[c]}%`;
+
+// Coarse band from a 0..100 score — the thresholds map the continuous score
+// back onto the three buckets used for coloring, stats grouping and dedup
+// ranking. `score` itself (via scoreLabel) is what the report/PDF/exports show.
+export function bandFromScore(score: number): Confidence {
+  if (score >= 80) return "high";
+  if (score >= 55) return "medium";
+  return "low";
+}
+
+export const scoreLabel = (score: number): string => `${Math.round(score)}%`;
 
 // ── Georeferencing (from GeoTIFF input) ────────────────────────────────────
 

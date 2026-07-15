@@ -32,7 +32,12 @@ function buildSchema(enabledCategories: readonly Category[]) {
             category: { type: "string", enum: enabledCategories as unknown as string[] },
             change_type: { type: "string", enum: ["added", "removed", "modified"] },
             description: { type: "string" },
-            confidence: { type: "string", enum: ["low", "medium", "high"] },
+            confidence: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100,
+              description: "How certain the change is genuine, 0-100 (use the full range, not just round buckets).",
+            },
             bbox: {
               type: "array",
               items: { type: "number" },
@@ -82,7 +87,7 @@ function cachedSystem(text: string): Anthropic.Messages.TextBlockParam[] {
 export async function anthropicDetect(
   referenceDataUrl: string,
   targetDataUrl: string,
-  opts: { model: string; apiKey?: string; language?: string; effort?: Effort; categories?: Category[] },
+  opts: { model: string; apiKey?: string; language?: string; effort?: Effort; categories?: Category[]; includeVegetation?: boolean },
 ): Promise<AnalyzeResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -99,7 +104,7 @@ export async function anthropicDetect(
   const params = {
     model: opts.model,
     max_tokens: 8000,
-    system: cachedSystem(buildSystem(enabledCategories)),
+    system: cachedSystem(buildSystem(enabledCategories, { includeVegetation: opts.includeVegetation })),
     output_config: { effort: opts.effort, format: { type: "json_schema", schema: buildSchema(enabledCategories) } },
     messages: [
       {
@@ -142,7 +147,12 @@ const VERIFY_SCHEMA = {
   additionalProperties: false,
   properties: {
     genuine: { type: "boolean" },
-    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    confidence: {
+      type: "integer",
+      minimum: 0,
+      maximum: 100,
+      description: "How certain the change is genuine, 0-100.",
+    },
     change_type: {
       type: "string",
       enum: ["added", "removed", "modified"],
