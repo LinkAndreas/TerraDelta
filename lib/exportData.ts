@@ -14,11 +14,22 @@ import { changeAreaM2, changeBboxRingLonLat, changeCenterLonLat } from "./geo";
 import { CATEGORY_REF, CHANGE_COLORS, type Category, type Change, type ChangeType, type GeoRef } from "./types";
 import type { Lang } from "./i18n";
 
-// Official Mini-OK BW catalog reference for a change's category, or "" if
-// the category isn't a recognized catalog leaf (shouldn't happen — kept
-// defensive since exports run on user-facing data).
+// Official Mini-OK BW catalog reference for a change's category, or "" if the
+// category isn't a recognized catalog leaf (the UNCLASSIFIED sentinel, for a
+// difference no catalog object type describes).
 function catalogRef(category: string): string {
   return CATEGORY_REF[category as Category] ?? "";
+}
+
+// The alternative classifications of a change, as one compact field:
+// "platz.parkplatz:71|strasse:45". Empty when the best match was the only one
+// (or when nothing in the catalog fit). Kept as a single column/property so
+// every export format stays flat and diff-friendly.
+function alternativesField(c: Change): string {
+  return (c.matches ?? [])
+    .slice(1)
+    .map((m) => `${m.category}:${Math.round(m.fit)}`)
+    .join("|");
 }
 
 function triggerDownload(content: string | Blob, mimeType: string, filename: string): void {
@@ -43,6 +54,11 @@ interface ChangeRecord {
   id: string;
   category: string;
   catalog_ref: string;
+  // How well `category` (the best-fitting catalog type) matches, 0..100 —
+  // null when no catalog type fit the difference at all.
+  category_fit: number | null;
+  // Runner-up classifications, "category:fit" pairs joined by "|".
+  category_alternatives: string;
   change_type: ChangeType;
   confidence: string;
   score: number;
@@ -73,6 +89,8 @@ function toRecord(c: Change, geo?: GeoRef | null): ChangeRecord {
     id: c.id,
     category: c.category,
     catalog_ref: catalogRef(c.category),
+    category_fit: c.matches?.[0]?.fit ?? null,
+    category_alternatives: alternativesField(c),
     change_type: c.change_type,
     confidence: c.confidence,
     score: c.score,
@@ -103,6 +121,8 @@ function csvString(changes: Change[], geo?: GeoRef | null): string {
     "id",
     "category",
     "catalog_ref",
+    "category_fit",
+    "category_alternatives",
     "change_type",
     "confidence",
     "confidence_score",
@@ -121,6 +141,8 @@ function csvString(changes: Change[], geo?: GeoRef | null): string {
       r.id,
       r.category,
       r.catalog_ref,
+      r.category_fit ?? "",
+      r.category_alternatives,
       r.change_type,
       r.confidence,
       r.score,
@@ -158,6 +180,8 @@ export function buildGeoJson(changes: Change[], geo: GeoRef): string {
           id: r.id,
           category: r.category,
           catalog_ref: r.catalog_ref,
+          category_fit: r.category_fit,
+          category_alternatives: r.category_alternatives,
           change_type: r.change_type,
           confidence: r.confidence,
           confidence_score: r.score,
@@ -214,8 +238,12 @@ export function buildKml(changes: Change[], geo: GeoRef, lang: Lang): string {
         .map(([lon, lat]) => `${lon},${lat},0`)
         .join(" ");
       const areaStr = r.area_m2 !== null ? `${Math.round(r.area_m2)} m²` : "";
+      const catLine = [r.catalog_ref, r.category_fit !== null ? `${r.category_fit}% fit` : ""]
+        .filter(Boolean)
+        .join(" · ");
       const desc = [
-        `${r.catalog_ref} · ${r.change_type} · ${r.score}%`,
+        [catLine, r.change_type, `${r.score}%`].filter(Boolean).join(" · "),
+        r.category_alternatives ? `alt: ${r.category_alternatives}` : "",
         r.description,
         r.note ? `↳ ${r.note}` : "",
         areaStr,

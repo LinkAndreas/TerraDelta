@@ -178,7 +178,7 @@ export default function Settings({
             <div>
               <select value={model} onChange={(e) => setModel(e.target.value)} className="field-select" disabled={!hasKey}>
                 <option key={"default"} value={"default"}>
-                  default
+                  {t("settings.modelDefault")}
                 </option>
                 {availableModels[provider]?.map((m) => (
                   <option key={m.id} value={m.id}>

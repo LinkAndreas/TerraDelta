@@ -974,6 +974,21 @@ select.lang:hover {
   gap: 2px;
 }
 
+/* Info panel for the chosen file (UploadZone): sits directly on top of the
+   uploaded photo, so it must be a solid surface — fully opaque background, no
+   inherited translucency or blur, and its own text alignment (the drop zone
+   centers text for its empty state). */
+.file-info-panel {
+  background-color: var(--card);
+  background-image: none;
+  opacity: 1;
+  backdrop-filter: none;
+  text-align: left;
+  border-color: var(--card-2);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
 .dropdown-item {
   display: block;
   width: 100%;
@@ -1113,6 +1128,19 @@ select.lang:hover {
   animation: indeterminate 1.3s ease-in-out infinite;
 }
 
+/* Determinate variant: width is set inline from the active sub-step's
+   done/total, so the bar actually fills up instead of sliding forever. */
+.progress-bar-fixed {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-hover), var(--accent));
+  transition: width 0.25s ease;
+}
+
 @keyframes indeterminate {
   0% {
     left: -40%;
@@ -1167,6 +1195,85 @@ select.lang:hover {
   background: #22c55e;
   color: #04210f;
   border-color: #22c55e;
+}
+
+/* Sub-steps of step 3 (analyzing): a smaller, indented pill row so the
+   hierarchy to the main steps above is obvious at a glance. */
+.substeps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: -4px 0 10px 22px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.substep {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  padding: 2px 9px 2px 5px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+
+.substep-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 700;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.substep-active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.substep-active .substep-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: substep-pulse 1.1s ease-in-out infinite;
+}
+
+.substep-done {
+  color: var(--text);
+}
+
+.substep-done .substep-dot {
+  background: #22c55e;
+  color: #04210f;
+  border-color: #22c55e;
+}
+
+.substep-tally {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.substep-active .substep-tally {
+  color: var(--text);
+}
+
+@keyframes substep-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
 }
 
 /* Mobile Optimizations */

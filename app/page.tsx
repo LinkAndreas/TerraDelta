@@ -11,9 +11,16 @@ import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, buildVerifyCrops, mapToGlobal, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
 import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
-import { PROVIDER_KEYS, PROVIDERS, type Provider } from "@/lib/models";
+import {
+  PROVIDER_KEYS,
+  PROVIDERS,
+  modelLabel,
+  providerModelLabel,
+  providerShortLabel,
+  type Provider,
+} from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
@@ -22,8 +29,10 @@ import {
   DEFAULT_EFFORT,
   defaultSelectedCategories,
   EFFORT_LEVELS,
+  primaryCategory,
   type AnalyzeResult,
   type Category,
+  type CategoryMatch,
   type Change,
   type ChangeType,
   type Currency,
@@ -43,6 +52,29 @@ const STAGE_KEY: Record<Stage, StringKey> = {
   aligning: "run.aligning",
   analyzing: "run.analyzing",
 };
+
+// The "analyzing" stage is by far the longest one and used to be a single
+// opaque step, so the UI couldn't say whether it was cutting tiles, waiting on
+// detection, or classifying candidates. These are its four internal phases, in
+// order — surfaced as sub-steps with their own determinate progress bar.
+const PHASES = ["splitting", "detecting", "merging", "classifying"] as const;
+type Phase = (typeof PHASES)[number];
+
+const PHASE_KEY: Record<Phase, StringKey> = {
+  splitting: "substep.split",
+  detecting: "substep.detect",
+  merging: "substep.merge",
+  classifying: "substep.classify",
+};
+
+// Phases whose progress is countable (n of total). The other two are short,
+// unmeasurable steps and keep the indeterminate bar.
+const COUNTED_PHASES: Phase[] = ["detecting", "classifying"];
+
+interface PhaseProgress {
+  done: number;
+  total: number;
+}
 
 interface TaskResult {
   changes: Change[];
@@ -78,6 +110,10 @@ export default function Home() {
   const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(defaultSelectedCategories);
 
   const [stage, setStage] = useState<Stage>("idle");
+  // Which sub-step of the analyzing stage is running, and how far along it is
+  // when that is countable (see PHASES / COUNTED_PHASES).
+  const [phase, setPhase] = useState<Phase | null>(null);
+  const [phaseProgress, setPhaseProgress] = useState<PhaseProgress | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -98,11 +134,13 @@ export default function Home() {
   const [minScore, setMinScore] = useState<number>(0);
   const [query, setQuery] = useState("");
 
-  // §5: Vegetation/land-use is opt-in (Options toggle). Enabled by default,
-  // consistent with the full-catalog (Grundaktualität) default — when off, the
-  // vegetation_landwirtschaft categories are stripped from the run's scope and
-  // the prompt suppresses that whole theme.
-  const [includeVegetation, setIncludeVegetation] = useState(true);
+  // §5: Vegetation/land-cover is opt-in (Options toggle) and OFF by default —
+  // it is the noisiest theme on a typical orthophoto pair (fields look
+  // different every year), so including it by default buried the
+  // built-environment differences most runs are actually about. When off, the
+  // detector is told to skip vegetation-only differences and any change whose
+  // classification is purely vegetation is filtered out.
+  const [includeVegetation, setIncludeVegetation] = useState(false);
 
   // Provider / model / API keys / cost-estimate currency / reasoning effort (persisted to localStorage).
   const [provider, setProvider] = useState<Provider>("anthropic");
@@ -188,7 +226,16 @@ export default function Home() {
     (!searchAreaEnabled || (geoAvailable && !!activeSearchArea)) &&
     CATEGORIES.some((c) => selectedCategories[c]);
   const hasKey = !!keys[provider]?.trim();
-  const providerShort = PROVIDERS[provider].label.split(" — ")[1] ?? PROVIDERS[provider].label;
+  // What the model chip reads. The provider's fetched model list supplies the
+  // display name, so a newly released model labels itself correctly with no
+  // change here; `providerModelLabel` also drops the provider prefix when the
+  // model name already contains it ("Claude · Claude Sonnet 5" → "Claude
+  // Sonnet 5"). "default" isn't a real id and never appears in that list, so it
+  // gets its own translated label.
+  const modelIndicatorLabel =
+    model === "default"
+      ? `${providerShortLabel(provider)} · ${t("settings.modelDefault")}`
+      : providerModelLabel(provider, model, availableModels[provider]);
   // Single tri-state readout for "is the selected model usable right now",
   // shared by the topbar and run-row indicators so they never disagree.
   const modelStatus: "ready" | "noKey" | "limited" = rateLimitAlert ? "limited" : hasKey ? "ready" : "noKey";
@@ -217,6 +264,13 @@ export default function Home() {
     return () => clearInterval(id);
   }, [busy]);
 
+  // Percentage of the current sub-step, or null when it isn't measurable (then
+  // the bar stays indeterminate).
+  const pct =
+    phaseProgress && phaseProgress.total > 0
+      ? Math.min(100, Math.round((phaseProgress.done / phaseProgress.total) * 100))
+      : null;
+
   const visibleIds = useMemo(() => {
     const set = new Set<string>();
     if (!result) return set;
@@ -224,7 +278,11 @@ export default function Home() {
     for (const c of result.changes) {
       if (!typeFilter[c.change_type]) continue;
       if ((c.score ?? 0) < minScore) continue;
-      if (q && !(`${c.description} ${c.category}`.toLowerCase().includes(q))) continue;
+      // Search across the description and every candidate category, not just
+      // the best-fitting one — an alternative match is shown in the table, so
+      // it has to be findable too.
+      const haystack = `${c.description} ${(c.matches ?? []).map((m) => m.category).join(" ")}`.toLowerCase();
+      if (q && !haystack.includes(q)) continue;
       set.add(c.id);
     }
     return set;
@@ -257,6 +315,8 @@ export default function Home() {
       setAlign(aligned);
 
       setStage("analyzing");
+      setPhase("splitting");
+      setPhaseProgress(null);
       setProgressMsg(t("progress.splitting"));
       const { overview, tiles } = await buildTiles(aligned.refUrl, aligned.targetUrl);
 
@@ -272,22 +332,36 @@ export default function Home() {
         tasks = restricted.length > 0 ? restricted : tiles;
       }
 
+      setPhase("detecting");
+      setPhaseProgress({ done: 0, total: tasks.length });
+      setProgressMsg(t("progress.region", { done: 0, total: tasks.length }));
       let done = 0;
       const onTaskDone = () => {
         done++;
+        setPhaseProgress({ done, total: tasks.length });
         setProgressMsg(t("progress.region", { done, total: tasks.length }));
       };
 
-      // Scope the model's search to exactly what's selected, instead of
-      // always asking it to hunt through the full 62-category catalog and
-      // discarding the unwanted results afterward (see lib/prompt.ts
-      // buildSystem) — cuts noise and misclassification risk on runs
-      // restricted to a small subset like Spitzenaktualisierung alone.
-      // When vegetation is opted out, drop those categories from scope even if
-      // still checked in the tree, so the model is never asked to report them.
-      const enabledCategories = CATEGORIES.filter(
-        (c) => selectedCategories[c] && (includeVegetation || !c.startsWith("vegetation_landwirtschaft.")),
+      // The categories a change must match to be reported. Applied AFTER
+      // classification, against every one of a change's candidate categories
+      // (see below) — the detection pass itself is intentionally
+      // category-free, so nothing is lost just because the detector couldn't
+      // place a difference inside the current scope. Vegetation categories
+      // count as out of scope while the toggle is off, even if still checked
+      // in the tree.
+      const activeCategories = new Set<string>(
+        CATEGORIES.filter(
+          (c) => selectedCategories[c] && (includeVegetation || !c.startsWith("vegetation_landwirtschaft.")),
+        ),
       );
+      // A change the catalog has no type for is kept regardless of the
+      // selection: it IS a detected difference, and hiding it is exactly the
+      // over-filtering this pipeline is meant to avoid. It's labeled
+      // "unclassified" in the report instead.
+      const inScope = (c: Change) => {
+        const matches = c.matches ?? [];
+        return matches.length === 0 || matches.some((m) => activeCategories.has(m.category));
+      };
 
       const results: TaskResult[] = await runPool<Tile, TaskResult>(
         tasks,
@@ -305,7 +379,6 @@ export default function Home() {
                 apiKey: keys[provider] || undefined,
                 lang,
                 effort,
-                categories: enabledCategories,
                 includeVegetation,
               }),
             });
@@ -335,26 +408,40 @@ export default function Home() {
       );
       if (results.some((r) => r.status === 429)) setRateLimitAlert(true);
 
+      setPhase("merging");
+      setPhaseProgress(null);
       setProgressMsg(t("progress.merging"));
-      // §5.0/§5.4: keep only the selected change-type categories, and (in
-      // restricted-search mode) only changes whose center actually falls
-      // inside the requested search area — tile-overlap pruning above is
-      // loose (a tile can overlap the area at just one corner), so a
+      // §5.4: in restricted-search mode keep only differences whose center
+      // actually falls inside the requested search area — tile-overlap pruning
+      // above is loose (a tile can overlap the area at just one corner), so a
       // detection anywhere in that tile can still land outside it. Filtering
-      // here, before the costly per-candidate verification pass below, means
-      // we never pay for an extra API call confirming a change we're about
-      // to discard anyway.
-      const merged = dedupe(results.flatMap((r) => r.changes))
-        .filter((c) => selectedCategories[c.category as Category] ?? true)
-        .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c));
+      // here, before the per-candidate classification pass below, means we
+      // never pay for an API call on a difference we're about to discard.
+      // No category filtering happens at this point: the detections aren't
+      // classified yet.
+      const merged = dedupe(results.flatMap((r) => r.changes)).filter(
+        (c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c),
+      );
 
-      // Second pass: re-examine every candidate on a zoomed-in crop so false
-      // positives (lighting/season artifacts) are dropped and boxes tightened.
-      // The detection pass is tuned for recall; this pass restores precision.
+      // Second pass: re-examine every candidate on a zoomed-in crop to (a)
+      // confirm it's a real physical change and drop artifacts
+      // (lighting/season/vehicles), (b) tighten its box and direction, and
+      // (c) map it onto the catalog — up to 3 fitting categories, each with
+      // its own fit percentage. The detection pass is tuned for recall; this
+      // pass restores precision and adds the classification.
       let confirmed = merged;
       const verifyUsages: TokenUsage[] = [];
+      // Classification failures used to be swallowed entirely: a failed call
+      // fell back to the raw detection, which then showed up as "unclassified"
+      // with no hint that anything had gone wrong. A broken classify schema
+      // therefore looked like a model that simply refused to classify. Count
+      // them and surface the first error instead.
+      let classifyFailed = 0;
+      let classifyError = "";
       if (merged.length > 0) {
-        setProgressMsg(t("progress.verifying", { done: 0, total: merged.length }));
+        setPhase("classifying");
+        setPhaseProgress({ done: 0, total: merged.length });
+        setProgressMsg(t("progress.classifying", { done: 0, total: merged.length }));
         const crops = await buildVerifyCrops(
           aligned.refUrl,
           aligned.targetUrl,
@@ -378,46 +465,66 @@ export default function Home() {
                   lang,
                   effort,
                   candidate: {
-                    category: chg.category,
                     change_type: chg.change_type,
                     description: chg.description,
+                    // Where the candidate sits inside its own crop — lets the
+                    // classifier correct a coarse box instead of re-finding the
+                    // object in a crop that is mostly context.
+                    bbox: mapToTile(crops[i], chg.bbox),
                   },
                 }),
               });
               const data = await res.json();
               if (!res.ok) {
                 if (res.status === 429) setRateLimitAlert(true);
-                throw new Error(data.error || "Verification failed");
+                throw new Error(data.error || "Classification failed");
               }
               // Record spend even for a rejected candidate — the call still cost tokens.
               if (data.usage) verifyUsages.push(data.usage);
               if (!data.genuine) return null;
-              const refined = mapToGlobal(crops[i], data.bbox ?? [0, 0, 0, 0]);
-              const refinedOk = refined[2] > 0.001 && refined[3] > 0.001;
-              // The verifier judges the crop up close: adopt its corrected
-              // direction (added/removed/modified) when it returned one, and
-              // keep its one-line rationale as the change's `note` — surfaced
-              // in the report, PDF, and data exports.
+              // Accept the tightened box unless it's degenerate (rounded to
+              // nothing) or it's the whole crop — "the entire crop changed" is
+              // the shape a model returns when it didn't actually localize the
+              // object, and it would be a worse box than the detector's.
+              const cropBox: [number, number, number, number] = Array.isArray(data.bbox)
+                ? (data.bbox as [number, number, number, number])
+                : [0, 0, 0, 0];
+              const refined = mapToGlobal(crops[i], cropBox);
+              const coversWholeCrop = cropBox[2] * cropBox[3] >= 0.92;
+              const refinedOk = refined[2] > 0.001 && refined[3] > 0.001 && !coversWholeCrop;
+              // The classifier judges the crop up close: adopt its corrected
+              // direction (added/removed/modified) when it returned one, its
+              // catalog matches, and its one-line rationale as the change's
+              // `note` — surfaced in the report, PDF, and data exports.
               const note = typeof data.reason === "string" ? data.reason.trim() : "";
               const verifiedType = ["added", "removed", "modified"].includes(data.changeType)
                 ? (data.changeType as ChangeType)
                 : chg.change_type;
               const vScore = typeof data.score === "number" ? data.score : chg.score;
+              const matches: CategoryMatch[] = Array.isArray(data.matches) ? data.matches : [];
               return {
                 ...chg,
                 change_type: verifiedType,
                 score: vScore,
                 confidence: bandFromScore(vScore),
+                matches,
+                category: primaryCategory(matches),
                 bbox: refinedOk ? refined : chg.bbox,
                 note: note || chg.note,
               };
-            } catch {
-              return chg; // verification unavailable — keep the original detection
+            } catch (e) {
+              // Keep the raw detection so the difference isn't lost, but record
+              // the failure so the run reports it instead of quietly showing an
+              // unclassified change.
+              classifyFailed++;
+              if (!classifyError) classifyError = e instanceof Error ? e.message : String(e);
+              return chg;
             }
           },
           () => {
             vDone++;
-            setProgressMsg(t("progress.verifying", { done: vDone, total: merged.length }));
+            setPhaseProgress({ done: vDone, total: merged.length });
+            setProgressMsg(t("progress.classifying", { done: vDone, total: merged.length }));
           },
         );
         confirmed = verified
@@ -425,10 +532,14 @@ export default function Home() {
           .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
       }
 
-      // Re-apply the same area check post-verification: the crop-based pass
-      // above can tighten/shift a candidate's bbox, so one that started out
-      // inside the search area could refine to just outside it.
+      // Now that every surviving difference carries its catalog matches, apply
+      // the category selection — a change stays if ANY of its candidate
+      // categories is in scope (or if none of the catalog fits it at all).
+      // Also re-apply the area check: the crop-based pass above can
+      // tighten/shift a bbox, so a candidate that started inside the search
+      // area could refine to just outside it.
       const filtered = confirmed
+        .filter(inScope)
         .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c))
         .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
 
@@ -462,11 +573,23 @@ export default function Home() {
             err: firstErr,
           }),
         );
+      } else if (classifyFailed > 0) {
+        // Detection worked but classification didn't — say so, rather than
+        // leaving the user to guess why changes came back unclassified.
+        setError(
+          t("error.classifyFailed", {
+            failed: classifyFailed,
+            total: merged.length,
+            err: classifyError || "unknown error",
+          }),
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : t("error.generic"));
     } finally {
       setStage("idle");
+      setPhase(null);
+      setPhaseProgress(null);
       setProgressMsg("");
     }
   }
@@ -686,7 +809,7 @@ export default function Home() {
             aria-label={t("settings.topbarLabel")}
           >
             <span className="status-dot" style={{ background: modelStatusColor }} aria-hidden />
-            {providerShort} · {model}
+            {modelIndicatorLabel}
           </button>
           {align && stage === "idle" && (
             <span className="pill">
@@ -704,12 +827,20 @@ export default function Home() {
         {busy && (
           <div style={{ marginTop: 14 }}>
             <Steps stage={stage} />
+            {stage === "analyzing" && phase && <SubSteps phase={phase} progress={phaseProgress} />}
             <div className="progress-track">
-              <div className="progress-bar" />
+              {/* Determinate while a countable sub-step runs (regions
+                  detected, candidates classified); indeterminate otherwise. */}
+              {pct === null ? (
+                <div className="progress-bar" />
+              ) : (
+                <div className="progress-bar-fixed" style={{ width: `${pct}%` }} />
+              )}
             </div>
             <div className="row" style={{ justifyContent: "space-between", gap: 12, marginTop: 8 }}>
               <span style={{ fontSize: 13 }}>{progressMsg}</span>
               <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                {pct !== null && `${pct}% · `}
                 {elapsed.toFixed(1)}s
               </span>
             </div>
@@ -747,7 +878,12 @@ export default function Home() {
               <p style={{ margin: "6px 0 0" }}>{result.summary}</p>
               <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 2 }}>
                 <span className="muted" style={{ fontSize: 12 }}>
-                  {t("summary.meta", { n: result.changes.length, model: result.model })}
+                  {/* The model that actually ran, by its readable name rather
+                      than its wire id. */}
+                  {t("summary.meta", {
+                    n: result.changes.length,
+                    model: modelLabel(result.model, availableModels[provider]),
+                  })}
                 </span>
               </div>
             </div>
@@ -806,6 +942,11 @@ export default function Home() {
         <span>
           <strong style={{ color: "var(--text)" }}>TerraDelta</strong> · {t("app.tagline")}
         </span>
+        {/* Pushed to the trailing edge on wide screens; the footer switches to
+            a column below 720px (see globals.css), where it simply stacks. */}
+        <span style={{ marginLeft: "auto", fontSize: 13.5 }}>
+          {t("footer.copyright", { year: new Date().getFullYear() })}
+        </span>
       </footer>
 
       <Settings
@@ -854,6 +995,36 @@ const STEPS: { key: Stage; label: StringKey }[] = [
   { key: "aligning", label: "step.align" },
   { key: "analyzing", label: "step.detect" },
 ];
+
+// Sub-steps of the analyzing stage (step 3): shown indented beneath the main
+// step row, each with its own state, and the countable ones with their live
+// "done/total" tally so a long run is never a black box.
+function SubSteps({ phase, progress }: { phase: Phase; progress: PhaseProgress | null }) {
+  const { t } = useI18n();
+  const current = PHASES.indexOf(phase);
+  return (
+    <div className="substeps">
+      {PHASES.map((p, i) => {
+        const state = i < current ? "done" : i === current ? "active" : "todo";
+        const counted = COUNTED_PHASES.includes(p);
+        const showTally = state === "active" && counted && progress;
+        return (
+          <span key={p} className={`substep substep-${state}`}>
+            <span className="substep-dot" aria-hidden>
+              {state === "done" ? "✓" : ""}
+            </span>
+            {t(PHASE_KEY[p])}
+            {showTally && (
+              <span className="substep-tally">
+                {progress.done}/{progress.total}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 function Steps({ stage }: { stage: Stage }) {
   const { t } = useI18n();

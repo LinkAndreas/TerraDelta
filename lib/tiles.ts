@@ -3,7 +3,7 @@
 // in-frame -> far better recall and localization). Also maps per-tile boxes
 // back to global coordinates and de-duplicates overlapping detections.
 
-import { bandFromScore, CATEGORY_REF, type Category, type Change } from "./types";
+import { bandFromScore, type Change } from "./types";
 
 export interface Tile {
   refUrl: string;
@@ -171,6 +171,23 @@ export function mapToGlobal(
   return [gx, gy, gw, gh];
 }
 
+// Inverse of mapToGlobal: express a global box in one tile's/crop's own
+// normalized coordinates. Used to tell the classifier where inside its zoomed
+// crop the detector's candidate box sits, so it can correct that rectangle
+// instead of hunting for the object from scratch.
+export function mapToTile(
+  tile: Tile,
+  bbox: [number, number, number, number],
+): [number, number, number, number] {
+  const [gx, gy, gw, gh] = bbox;
+  if (tile.gw <= 0 || tile.gh <= 0) return [0, 0, 0, 0];
+  const x = clamp01((gx - tile.gx) / tile.gw);
+  const y = clamp01((gy - tile.gy) / tile.gh);
+  const w = Math.min(gw / tile.gw, 1 - x);
+  const h = Math.min(gh / tile.gh, 1 - y);
+  return [x, y, Math.max(w, 0), Math.max(h, 0)];
+}
+
 function area(b: [number, number, number, number]) {
   return b[2] * b[3];
 }
@@ -190,60 +207,27 @@ function iou(
   return union <= 0 ? 0 : inter / union;
 }
 
-// Fraction of the smaller box covered by the intersection — catches the same
-// change detected at different scales (e.g. overview vs fine tile), where IoU
-// stays low because the box sizes differ a lot.
-function containment(
-  a: [number, number, number, number],
-  b: [number, number, number, number],
-): number {
-  const ix = Math.max(
-    0,
-    Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]),
-  );
-  const iy = Math.max(
-    0,
-    Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]),
-  );
-  const minArea = Math.min(area(a), area(b));
-  return minArea <= 0 ? 0 : (ix * iy) / minArea;
-}
-
-// OAR object-type family of a category (the part before "/" in
-// CATEGORY_REF), or the raw string if it's not a recognized catalog leaf.
-// Two categories in the same family are either literal subtypes of one
-// official object type (e.g. "platz.parkplatz"/"platz.rastplatz", both under
-// OAR 42009) or — for three specific pairs — two app-level categories that
-// map to the exact same official WAR code (raststaette/autohof,
-// hochbahn/hochstrasse, tunnel/unterfuehrung; see CATEGORY_REF's note).
-function oarFamily(category: string): string {
-  const ref = CATEGORY_REF[category as Category];
-  return ref ? ref.split("/")[0] : category;
-}
-
-// Merge detections from overlapping tiles: drop near-duplicate boxes of the
-// same change type, keeping the higher-confidence / larger one. Boxes are
-// also deduped by containment when they're the same OAR family — not just
-// exact same category — so a change re-detected at a coarser zoom, OR the
-// same real object classified under two adjacent subtypes/synonym-pairs by
-// different detector passes (e.g. one tile calls a rest stop "raststaette",
-// an overlapping tile calls it "autohof"), doesn't appear twice. Distinct
-// objects inside an area-scale change (houses within a new "plot") still
-// survive because they belong to unrelated OAR families entirely.
 // Consensus bonus added to a change's 0..100 score per corroborating pass
 // beyond the first (capped), plus the overall cap.
 const CONSENSUS_BONUS_PER_VOTE = 6;
 const CONSENSUS_BONUS_MAX = 15;
 const SCORE_CAP = 99;
 
-// Whether two detections describe the SAME real-world change — the identical
-// predicate the loop below uses to fold a raw detection into a kept cluster.
+// Two detections count as the same real-world difference when they describe
+// the same direction of change over substantially the same footprint.
+//
+// This is deliberately geometry-only now. Detections arrive uncategorized
+// (classification happens later, per candidate — see lib/prompt.ts), and the
+// old category-family containment rule also collapsed genuinely distinct
+// nested differences: a coarse "new development area" box swallowed the
+// individual road and hall detections inside it whenever they happened to
+// share an OAR family. A plain IoU threshold merges the same object seen by
+// two overlapping tiles (both boxes hug the same object → high IoU) while
+// keeping a small object inside a large area as its own difference.
+const SAME_CHANGE_IOU = 0.45;
+
 function sameChange(k: Change, c: Change): boolean {
-  return (
-    k.change_type === c.change_type &&
-    (iou(k.bbox, c.bbox) > 0.4 ||
-      (oarFamily(k.category) === oarFamily(c.category) && containment(k.bbox, c.bbox) > 0.75))
-  );
+  return k.change_type === c.change_type && iou(k.bbox, c.bbox) > SAME_CHANGE_IOU;
 }
 
 export function dedupe(changes: Change[]): Change[] {

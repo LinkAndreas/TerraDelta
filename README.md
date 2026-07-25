@@ -34,7 +34,9 @@ in a filterable, exportable report.
 - **AI change detection** — Powered by Anthropic **Claude**, with model selection.
 - **In-browser image co-registration** — ORB feature matching + RANSAC homography (OpenCV.js, no server GPU).
 - **Tiled, high-resolution analysis** — the scene is split into overlapping tiles and analyzed region by region for high recall and precise boxes, then de-duplicated.
-- **Precision-focused prompt** — ignores lighting/season/shadows/crop changes; flags only genuine structural & land-use changes.
+- **Detect first, classify second** — the detection pass looks for *every* physical difference with no catalog in mind; a second close-up pass confirms each one and maps it onto the Grund-/Spitzenaktualisierung object catalog, reporting up to **3 fitting categories with a confidence each** instead of forcing a single label. Differences the catalog has no type for are still listed (as *unclassified*) rather than dropped.
+- **Artifact-focused rejection** — ignores lighting/season/shadows/crop cycles, vehicles and residual misalignment; nothing is rejected merely for being hard to categorize.
+- **Vegetation opt-in** — land-cover changes are off by default (the noisiest theme); buildings, roads and earthworks on former vegetation are always reported.
 - **Interactive comparison** — Earlier / Later / draggable **Slider** / **Side-by-side**, with colored overlays, a spotlight mode and numbered chips synced to the report.
 - **Filterable report** — by change type and confidence, with CSV export.
 - **Bilingual** — English & **German** (default), including translated model output.
@@ -44,8 +46,10 @@ in a filterable, exportable report.
 
 1. Both images are **co-registered** in the browser (ORB + RANSAC homography), warping the later image onto the earlier one's frame.
 2. The aligned pair is split into **overlapping high-resolution tiles** plus one overview pass.
-3. Each region is sent to a **vision model** (Claude) that reasons about genuine structural / land-use changes.
-4. Detections are mapped back to global coordinates, **de-duplicated**, highlighted and listed.
+3. Each region is sent to a **vision model** (Claude) that reports every physical difference it can see — no object catalog, no category filter, tuned for recall.
+4. Detections are mapped back to global coordinates and **de-duplicated** by footprint.
+5. Every surviving difference is re-examined on a **zoomed crop**: artifacts (lighting, season, vehicles, misalignment) are rejected, the box and direction are corrected, and the difference is **classified against the object catalog** — up to 3 fitting categories, each with its own fit percentage.
+6. Your category selection is applied last, against *all* of a change's candidate categories, then the results are highlighted and listed.
 
 Only aligned, downscaled tiles ever leave the browser; the API key is used
 server-side and never exposed to the client bundle.

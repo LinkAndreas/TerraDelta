@@ -395,9 +395,42 @@ export function defaultSelectedCategories(): Record<Category, boolean> {
   return result as Record<Category, boolean>;
 }
 
+// One candidate catalog classification of a detected difference: the leaf
+// category plus how well it fits (0..100). The pipeline detects differences
+// FIRST, without any catalog in mind, and only afterwards maps each one onto
+// the Grund-/Spitzenaktualisierung catalog — a mapping that is genuinely
+// ambiguous for many real objects (a new paved surface next to a hall could
+// be "strasse", "platz.parkplatz" or "siedlungsflaeche.industrie_gewerbeflaeche"),
+// so the model reports up to MAX_CATEGORY_MATCHES fits instead of being forced
+// to pick one and silently discarding the alternatives.
+export interface CategoryMatch {
+  category: Category;
+  // How well this category describes the observed difference, 0..100.
+  fit: number;
+}
+
+// How many alternative classifications a change carries at most.
+export const MAX_CATEGORY_MATCHES = 3;
+
+// Sentinel `category` for a genuine physical difference that no catalog
+// object type describes. Such a change is KEPT and shown (the user asked to
+// see every detected difference), just without a catalog reference.
+export const UNCLASSIFIED = "unclassified";
+
+// The category a change is filed under: its best-fitting match, or the
+// UNCLASSIFIED sentinel when the catalog has nothing for it.
+export function primaryCategory(matches: readonly CategoryMatch[] | undefined): string {
+  return matches?.[0]?.category ?? UNCLASSIFIED;
+}
+
 export interface Change {
   id: string;
+  // Best-fitting catalog category (i.e. `matches[0].category`), or
+  // UNCLASSIFIED when no catalog object type describes this difference.
   category: string;
+  // All plausible classifications, best first, at most MAX_CATEGORY_MATCHES.
+  // Empty/absent when the difference maps to nothing in the catalog.
+  matches?: CategoryMatch[];
   change_type: ChangeType;
   description: string;
   // Numeric confidence 0..100 — the finer gradation the model now emits per
@@ -432,7 +465,7 @@ export interface Change {
 // inputTokens is the NON-cached portion only (Anthropic's `input_tokens`
 // already excludes cache hits); cacheWriteTokens/cacheReadTokens break out
 // the cached portion, which is billed at different (write: ~1.25x, read:
-// ~0.1x base input price) rates — see buildSystem's cache_control usage in
+// ~0.1x base input price) rates — see cachedSystem's cache_control usage in
 // lib/claude.ts for why most of a run's system-prompt tokens end up here
 // instead of in inputTokens after the first tile.
 export interface TokenUsage {
@@ -459,15 +492,22 @@ export interface AnalyzeResult {
   usage: TokenUsage;
 }
 
-// Result of the second-pass verification of a single candidate change,
-// judged on a zoomed-in crop around the detection.
-export interface VerifyResult {
+// Result of the second pass over a single detected difference, judged on a
+// zoomed-in crop around it. This pass does two things at once: it confirms the
+// difference is a real physical change (not a lighting/season/vehicle
+// artifact) and it maps it onto the catalog (see `matches`).
+export interface ClassifyResult {
   genuine: boolean;
   // Numeric 0..100, re-judged on the zoomed crop (the pipeline recomputes the
   // coarse band from it — see bandFromScore).
   score: number;
   confidence: Confidence;
-  // The verifier judges the candidate on a zoomed-in crop, where added-vs-
+  // Catalog classification of this difference — up to MAX_CATEGORY_MATCHES
+  // plausible categories, best first, each with its own fit percentage. Empty
+  // when no catalog object type describes the difference (the change is still
+  // kept and reported as UNCLASSIFIED).
+  matches: CategoryMatch[];
+  // The classifier judges the candidate on a zoomed-in crop, where added-vs-
   // removed-vs-modified is often clearer than in the coarse detection tile it
   // came from. When it disagrees with the detector's label it returns the
   // corrected type here; the pipeline adopts it (see app/page.tsx). Absent /

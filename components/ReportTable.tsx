@@ -133,6 +133,49 @@ export default function ReportTable({
     return label === key ? cat : label;
   };
 
+  // Catalog classification cell: the best-fitting category with its fit
+  // percentage, plus the runner-up alternatives (up to MAX_CATEGORY_MATCHES in
+  // total) — the mapping from "a physical difference" to a catalog object type
+  // is often genuinely ambiguous, so the alternatives are shown rather than
+  // hidden behind a forced single pick. A difference the catalog has no type
+  // for is reported as unclassified instead of being dropped.
+  const CategoryCell = ({ c }: { c: Change }) => {
+    const matches = c.matches ?? [];
+    if (matches.length === 0) {
+      return (
+        <span className="muted" style={{ fontStyle: "italic" }} title={t("cat.unclassifiedTip")}>
+          {t("cat.unclassified")}
+        </span>
+      );
+    }
+    const [best, ...alts] = matches;
+    return (
+      <>
+        <div>
+          {catLabel(best.category)}
+          <span className="muted" style={{ fontSize: 11, marginLeft: 5, fontVariantNumeric: "tabular-nums" }} title={t("report.fitTip")}>
+            {scoreLabel(best.fit)}
+          </span>
+          {CATEGORY_REF[best.category as Category] && (
+            <span className="muted" style={{ fontSize: 10.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
+              {CATEGORY_REF[best.category as Category]}
+            </span>
+          )}
+        </div>
+        {alts.length > 0 && (
+          <div className="muted" style={{ fontSize: 11, marginTop: 2 }} title={t("report.altCategoriesTip")}>
+            {alts.map((m) => (
+              <div key={m.category}>
+                ∼ {catLabel(m.category)}{" "}
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{scoreLabel(m.fit)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
@@ -254,12 +297,7 @@ export default function ReportTable({
                     </span>
                   </td>
                   <td>
-                    {catLabel(c.category)}
-                    {CATEGORY_REF[c.category as Category] && (
-                      <span className="muted" style={{ fontSize: 10.5, marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>
-                        {CATEGORY_REF[c.category as Category]}
-                      </span>
-                    )}
+                    <CategoryCell c={c} />
                   </td>
                   <td>
                     {c.description}

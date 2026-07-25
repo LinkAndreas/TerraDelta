@@ -1,6 +1,6 @@
-import type { AnalyzeResult, Category, Effort, VerifyResult } from "./types";
+import type { AnalyzeResult, ClassifyResult, Effort } from "./types";
 import { PROVIDERS, type Provider } from "./models";
-import { anthropicDetect, anthropicVerify } from "./claude";
+import { anthropicDetect, anthropicClassify } from "./claude";
 
 export interface DetectRequest {
   provider: Provider;
@@ -10,33 +10,46 @@ export interface DetectRequest {
   effort?: Effort;
   reference: string;
   target: string;
-  // The user's current category selection — scopes both what the model is
-  // told to report and the schema enum it must report within. Omitted/empty
-  // means "no restriction" (the full catalog), not "nothing in scope".
-  categories?: Category[];
-  // Whether Vegetation und Landwirtschaft land-cover changes are wanted this
-  // run (Options toggle). Only affects the detection prompt's vegetation
-  // stance; verification doesn't need it. Defaults to true.
+  // Whether vegetation/land-cover differences are wanted this run (Options
+  // toggle, default OFF). Only affects the detection prompt's vegetation
+  // stance; classification always works against the full catalog. Note the
+  // detector is otherwise NOT scoped by the user's category selection — that
+  // selection is applied client-side to the classified matches, so a real
+  // difference is never lost just because it fell outside the current scope.
   includeVegetation?: boolean;
 }
 
-export interface VerifyRequest extends DetectRequest {
-  candidate: { category: string; change_type: string; description: string };
+export interface ClassifyRequest extends DetectRequest {
+  candidate: {
+    change_type: string;
+    description: string;
+    // The detector's box in the verification crop's own coordinates, so the
+    // classifier can tighten that rectangle rather than re-locate the object.
+    bbox?: [number, number, number, number];
+  };
 }
 
 export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
-  const o = { model: req.model, apiKey: req.apiKey, language: req.language, effort: req.effort, categories: req.categories, includeVegetation: req.includeVegetation };
 
-  return anthropicDetect(req.reference, req.target, o);
+  return anthropicDetect(req.reference, req.target, {
+    model: req.model,
+    apiKey: req.apiKey,
+    language: req.language,
+    effort: req.effort,
+    includeVegetation: req.includeVegetation,
+  });
 }
 
-export async function verifyDetectedChange(req: VerifyRequest): Promise<VerifyResult> {
+// Second pass over one detected difference on a zoomed crop: confirm it's a
+// real physical change and map it onto the catalog (up to
+// MAX_CATEGORY_MATCHES categories with a fit percentage each).
+export async function classifyDetectedChange(req: ClassifyRequest): Promise<ClassifyResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
 
-  return anthropicVerify(req.reference, req.target, {
+  return anthropicClassify(req.reference, req.target, {
     model: req.model,
     apiKey: req.apiKey,
     language: req.language,
