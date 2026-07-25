@@ -36,6 +36,60 @@ export const PROVIDERS: Record<Provider, ProviderMeta> = {
 
 export const PROVIDER_KEYS = Object.keys(PROVIDERS) as Provider[];
 
+// ── Human-readable model labels ─────────────────────────────────────────────
+// Model ids are wire identifiers ("claude-sonnet-5"), not names anyone wants to
+// read in the UI. There is no hardcoded id→name map here on purpose: the
+// provider's own model list already returns a display name per model
+// ("Claude Sonnet 5"), so a model released tomorrow gets a correct label with
+// no code change. `prettifyModelId` is only the offline fallback for when that
+// list isn't available (no API key yet, fetch failed, or a persisted id the
+// provider no longer lists).
+
+// Derive a readable label from an id alone, by structure rather than by
+// lookup: a trailing 8-digit group is a snapshot date, any trailing numeric
+// groups form the version ("4-8" → "4.8"), and the rest are words.
+export function prettifyModelId(id: string): string {
+  const parts = id.split("-").filter(Boolean);
+  if (parts.length === 0) return id;
+
+  let snapshot = "";
+  if (parts.length > 1 && /^\d{8}$/.test(parts[parts.length - 1])) {
+    snapshot = parts.pop()!;
+  }
+
+  const version: string[] = [];
+  while (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) {
+    version.unshift(parts.pop()!);
+  }
+
+  const words = parts.map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  const label = [...words, version.join(".")].filter(Boolean).join(" ");
+  return snapshot ? `${label} (${snapshot})` : label;
+}
+
+// The label to show for a selected/used model id: the provider's own display
+// name when we have it, else the structural fallback.
+export function modelLabel(id: string, known?: SupportedModels): string {
+  return known?.find((m) => m.id === id)?.name?.trim() || prettifyModelId(id);
+}
+
+// Short provider name ("Claude") from a provider's "Vendor — Product" label.
+export function providerShortLabel(provider: Provider): string {
+  const label = PROVIDERS[provider].label;
+  return label.split(" — ")[1] ?? label;
+}
+
+// Provider + model as one line, WITHOUT repeating the provider when the model
+// label already carries it — "Claude · Claude Sonnet 5" is noise, and which
+// half is redundant depends on the vendor's naming, so decide it per label
+// rather than dropping the provider everywhere.
+export function providerModelLabel(provider: Provider, id: string, known?: SupportedModels): string {
+  const model = modelLabel(id, known);
+  const short = providerShortLabel(provider);
+  const redundant = model.toLowerCase().includes(short.toLowerCase());
+  return redundant ? model : `${short} · ${model}`;
+}
+
 // ── Cost estimation ─────────────────────────────────────────────────────────
 // Approximate USD-per-million-token pricing, matched against the selected
 // model id by family keyword (checked in order — most specific first). The

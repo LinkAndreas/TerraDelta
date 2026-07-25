@@ -1,54 +1,53 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { CATEGORIES, type AnalyzeResult, type Category, type Effort, type SupportedModels, type TokenUsage, type VerifyResult } from "./types";
+import { CATEGORIES, MAX_CATEGORY_MATCHES, type AnalyzeResult, type ClassifyResult, type Effort, type SupportedModels, type TokenUsage } from "./types";
 import {
-  buildSystem,
-  VERIFY_SYSTEM,
+  buildDetectSystem,
+  CLASSIFY_SYSTEM,
   buildResult,
-  buildVerifyResult,
+  buildClassifyResult,
   dataUrlParts,
   languageInstruction,
-  verifyLanguageInstruction,
+  classifyLanguageInstruction,
   stripFences,
 } from "./prompt";
 
-// Scoping the schema's category enum to the caller's selection (rather than
-// always the full 62-category CATEGORIES list) makes the restriction a hard
-// API-level guarantee, not just a prompt instruction the model could ignore
-// — Anthropic's structured-output schema rejects any category outside the
-// enum, so an out-of-scope detection literally can't be emitted.
-function buildSchema(enabledCategories: readonly Category[]) {
-  return {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      analysis: { type: "string", description: "Region-by-region reasoning before listing changes." },
-      summary: { type: "string", description: "1-3 sentence overview of the real changes." },
-      changes: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            category: { type: "string", enum: enabledCategories as unknown as string[] },
-            change_type: { type: "string", enum: ["added", "removed", "modified"] },
-            description: { type: "string" },
-            confidence: {
-              type: "integer",
-              description: "How certain the change is genuine, an integer from 0 to 100 (use the full range, not just round buckets).",
-            },
-            bbox: {
-              type: "array",
-              items: { type: "number" },
-              description: "[x, y, width, height], normalized 0..1, a TIGHT box hugging the changed object.",
-            },
+// Stage 1 (detection) carries NO category field: differences are found first
+// and classified afterwards (see lib/prompt.ts). The schema deliberately has
+// no category enum, so a real difference can never be lost just because the
+// detector couldn't fit it into one of the catalog's 62 leaves.
+const DETECT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    analysis: { type: "string", description: "Region-by-region reasoning before listing the differences." },
+    summary: { type: "string", description: "1-3 sentence overview of the physical differences found." },
+    changes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          change_type: { type: "string", enum: ["added", "removed", "modified"] },
+          description: {
+            type: "string",
+            description: "What the object is and how it physically changed between the two dates.",
           },
-          required: ["category", "change_type", "description", "confidence", "bbox"],
+          confidence: {
+            type: "integer",
+            description: "How certain this is a genuine physical difference, an integer from 0 to 100 (use the full range, not just round buckets).",
+          },
+          bbox: {
+            type: "array",
+            items: { type: "number" },
+            description: "[x, y, width, height], normalized 0..1, a TIGHT box hugging the changed object.",
+          },
         },
+        required: ["change_type", "description", "confidence", "bbox"],
       },
     },
-    required: ["analysis", "summary", "changes"],
-  };
-}
+  },
+  required: ["analysis", "summary", "changes"],
+};
 
 function tokenUsage(
   usage:
@@ -70,14 +69,15 @@ function tokenUsage(
 }
 
 // Wraps a system prompt string as a single cacheable block. The system
-// prompt is identical across every tile/candidate call within one run (same
-// catalog + same category selection throughout), so marking it as an
+// prompt is identical across every tile/candidate call within one run (the
+// detect prompt for tiles, the classify prompt for candidates), so marking it as an
 // ephemeral cache breakpoint means only the FIRST call in a run pays full
 // price for it — every later call in the same run (there can be 15-20+ tile
-// calls, plus one per verified candidate) reads it back at ~10% of the input
+// calls, plus one per classified candidate) reads it back at ~10% of the input
 // price instead of paying full price again. This is the single biggest
-// token-cost lever available here, since the system prompt (full 62-object
-// catalog description) dwarfs the per-tile image+instruction text.
+// token-cost lever available here, since the system prompt (for the classify
+// pass, the full 62-object catalog reference) dwarfs the per-call
+// image+instruction text.
 function cachedSystem(text: string): Anthropic.Messages.TextBlockParam[] {
   return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
 }
@@ -85,7 +85,7 @@ function cachedSystem(text: string): Anthropic.Messages.TextBlockParam[] {
 export async function anthropicDetect(
   referenceDataUrl: string,
   targetDataUrl: string,
-  opts: { model: string; apiKey?: string; language?: string; effort?: Effort; categories?: Category[]; includeVegetation?: boolean },
+  opts: { model: string; apiKey?: string; language?: string; effort?: Effort; includeVegetation?: boolean },
 ): Promise<AnalyzeResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -97,7 +97,6 @@ export async function anthropicDetect(
   const client = new Anthropic({ apiKey });
   const ref = dataUrlParts(referenceDataUrl);
   const tgt = dataUrlParts(targetDataUrl);
-  const enabledCategories = opts.categories && opts.categories.length > 0 ? opts.categories : (CATEGORIES as unknown as Category[]);
 
   const params = {
     model: opts.model,
@@ -106,8 +105,8 @@ export async function anthropicDetect(
     // be truncated mid-object (→ a parse failure that loses the whole tile).
     // 16000 gives ample headroom for the busiest tiles.
     max_tokens: 16000,
-    system: cachedSystem(buildSystem(enabledCategories, { includeVegetation: opts.includeVegetation })),
-    output_config: { effort: opts.effort, format: { type: "json_schema", schema: buildSchema(enabledCategories) } },
+    system: cachedSystem(buildDetectSystem({ includeVegetation: opts.includeVegetation })),
+    output_config: { effort: opts.effort, format: { type: "json_schema", schema: DETECT_SCHEMA } },
     messages: [
       {
         role: "user" as const,
@@ -119,7 +118,7 @@ export async function anthropicDetect(
           {
             type: "text" as const,
             text:
-              "Identify the semantic changes and return them in the required JSON schema." +
+              "Identify every physical difference between the two dates and return them in the required JSON schema." +
               languageInstruction(opts.language),
           },
         ],
@@ -152,31 +151,77 @@ export async function anthropicDetect(
   return buildResult(parsed, opts.model, usage);
 }
 
-const VERIFY_SCHEMA = {
+// The classify schema's category enum is ALWAYS the full 62-leaf catalog,
+// never the user's selection: the model should name the truly best-fitting
+// types, and the selection is applied afterwards (client-side) against every
+// reported match — rather than forcing a difference into an in-scope category
+// it doesn't belong to, or making it unrepresentable and losing it.
+//
+// Two schema details carry the "every change gets at least one category, at
+// most MAX_CATEGORY_MATCHES" requirement:
+//
+//  • `category` is a REQUIRED scalar enum, not an array entry. A required enum
+//    field cannot come back empty, so the API itself guarantees a primary
+//    classification — far more reliable than asking the prompt nicely and
+//    hoping for a non-empty array.
+//  • `alternatives` carries the runner-ups. It deliberately has NO `maxItems`:
+//    Anthropic's structured outputs do not support array-size constraints, and
+//    an unsupported keyword makes the whole schema invalid — which is what
+//    previously failed EVERY classify call (the error was then swallowed by the
+//    caller's fallback, so every change silently stayed unclassified). The
+//    1..MAX_CATEGORY_MATCHES limit is stated in the prompt and enforced in code
+//    (see parseClassification).
+const CLASSIFY_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
     genuine: { type: "boolean" },
     confidence: {
       type: "integer",
-      description: "How certain the change is genuine, an integer from 0 to 100.",
+      description: "How certain the difference itself is a real physical change, an integer from 0 to 100.",
     },
     change_type: {
       type: "string",
       enum: ["added", "removed", "modified"],
       description: "Corrected direction of the change as judged from the two crops.",
     },
+    category: {
+      type: "string",
+      enum: CATEGORIES as unknown as string[],
+      description: "The single best-fitting catalog category for this difference. Always required — pick the closest one even when the fit is poor.",
+    },
+    category_fit: {
+      type: "integer",
+      description: "How confident you are that `category` is the correct classification, an integer from 0 to 100.",
+    },
+    alternatives: {
+      type: "array",
+      description:
+        `Other categories that also plausibly fit, best first, at most ${MAX_CATEGORY_MATCHES - 1} (so at most ${MAX_CATEGORY_MATCHES} including \`category\`). Empty when only one category fits.`,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          category: { type: "string", enum: CATEGORIES as unknown as string[] },
+          fit: {
+            type: "integer",
+            description: "How confident you are that this category is the correct classification, an integer from 0 to 100.",
+          },
+        },
+        required: ["category", "fit"],
+      },
+    },
     bbox: {
       type: "array",
       items: { type: "number" },
-      description: "TIGHT box hugging the object in this crop, normalized 0..1. [0,0,0,0] if rejected.",
+      description: "TIGHT box hugging the changed object in THIS crop, normalized 0..1. [0,0,0,0] if rejected.",
     },
     reason: { type: "string" },
   },
-  required: ["genuine", "confidence", "change_type", "bbox", "reason"],
+  required: ["genuine", "confidence", "change_type", "category", "category_fit", "alternatives", "bbox", "reason"],
 };
 
-export async function anthropicVerify(
+export async function anthropicClassify(
   referenceDataUrl: string,
   targetDataUrl: string,
   opts: {
@@ -184,9 +229,14 @@ export async function anthropicVerify(
     apiKey?: string;
     language?: string;
     effort?: Effort;
-    candidate: { category: string; change_type: string; description: string };
+    // `bbox` is the detector's rectangle expressed in THIS crop's coordinates.
+    // Telling the classifier where the candidate object sits inside the crop is
+    // what makes box refinement work: without it the model has to re-find the
+    // object in a crop that is mostly context, and tends to return either the
+    // whole crop or a box around the wrong thing.
+    candidate: { change_type: string; description: string; bbox?: [number, number, number, number] };
   },
-): Promise<VerifyResult> {
+): Promise<ClassifyResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -201,13 +251,12 @@ export async function anthropicVerify(
 
   const params = {
     model: opts.model,
-    max_tokens: 1500,
-    // VERIFY_SYSTEM is short enough that it may fall under Anthropic's
-    // minimum cacheable block size (in which case this is a harmless no-op)
-    // — wrapped the same way as the detector's system prompt for
-    // consistency and so it starts benefiting automatically if it grows.
-    system: cachedSystem(VERIFY_SYSTEM),
-    output_config: { effort: opts.effort, format: { type: "json_schema", schema: VERIFY_SCHEMA } },
+    max_tokens: 2000,
+    // CLASSIFY_SYSTEM carries the full catalog reference and is identical for
+    // every candidate in a run, so caching it means only the first classify
+    // call pays for those tokens.
+    system: cachedSystem(CLASSIFY_SYSTEM),
+    output_config: { effort: opts.effort, format: { type: "json_schema", schema: CLASSIFY_SCHEMA } },
     messages: [
       {
         role: "user" as const,
@@ -219,9 +268,15 @@ export async function anthropicVerify(
           {
             type: "text" as const,
             text:
-              `Candidate change to verify: category "${c.category}", ${c.change_type} — ${c.description}\n` +
-              "Decide whether this is a genuine semantic change and return the JSON." +
-              verifyLanguageInstruction(opts.language),
+              `Difference reported here by the detector: ${c.change_type} — ${c.description}\n` +
+              (c.bbox
+                ? `The detector's rectangle for it, in THIS crop's normalized coordinates, is approximately [${c.bbox
+                    .map((n) => n.toFixed(3))
+                    .join(", ")}] as [x, y, width, height]. That box is coarse: correct it so it hugs the changed object exactly.\n`
+                : "") +
+              "Decide whether it is a genuine physical change, map it onto the catalog (always one best category, plus up to " +
+              `${MAX_CATEGORY_MATCHES - 1} alternatives, each with a fit percentage), tighten the box, and return the JSON.` +
+              classifyLanguageInstruction(opts.language),
           },
         ],
       },
@@ -236,13 +291,13 @@ export async function anthropicVerify(
   const raw = (textBlock?.text ?? "").trim();
   const usage = tokenUsage(response.usage);
 
-  let parsed: Parameters<typeof buildVerifyResult>[0];
+  let parsed: Parameters<typeof buildClassifyResult>[0];
   try {
     parsed = JSON.parse(stripFences(raw));
   } catch {
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
-  return buildVerifyResult(parsed, usage);
+  return buildClassifyResult(parsed, usage);
 }
 
 export async function fetchModels(

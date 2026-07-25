@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectChanges, verifyDetectedChange } from "@/lib/detect";
+import { classifyDetectedChange, detectChanges } from "@/lib/detect";
 import { PROVIDERS, type Provider } from "@/lib/models";
-import { CATEGORIES, EFFORT_LEVELS, type Category, type Effort } from "@/lib/types";
+import { EFFORT_LEVELS, type Effort } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const CATEGORY_SET = new Set<string>(CATEGORIES as unknown as string[]);
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang, effort, candidate, categories, includeVegetation } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, effort, candidate, includeVegetation } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -36,13 +34,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Only accept known catalog leaves — anything else (stale client, typo)
-    // is dropped rather than forwarded, since an unrecognized string in the
-    // schema enum would make the request fail outright.
-    const cleanCategories: Category[] | undefined = Array.isArray(categories)
-      ? categories.filter((c): c is Category => typeof c === "string" && CATEGORY_SET.has(c))
-      : undefined;
-
     const common = {
       provider: prov,
       model: typeof model === "string" ? model : "default",
@@ -51,19 +42,26 @@ export async function POST(req: NextRequest) {
       effort: EFFORT_LEVELS.includes(effort) ? (effort as Effort) : undefined,
       reference,
       target,
-      categories: cleanCategories,
-      includeVegetation: includeVegetation !== false, // default true
+      includeVegetation: includeVegetation === true, // default false
     };
 
-    // With a candidate, this is a second-pass verification of one detection
-    // on a zoomed crop; without one, a regular detection pass.
+    // With a candidate, this is the second pass over one detected difference
+    // on a zoomed crop (confirm + classify); without one, a detection pass.
     if (candidate && typeof candidate === "object") {
-      const result = await verifyDetectedChange({
+      const result = await classifyDetectedChange({
         ...common,
         candidate: {
-          category: String(candidate.category ?? "other"),
           change_type: String(candidate.change_type ?? "modified"),
           description: String(candidate.description ?? ""),
+          // The detector's box in the crop's own coordinates — only forwarded
+          // when it's four finite numbers, so a malformed client can't inject
+          // nonsense into the prompt.
+          bbox:
+            Array.isArray(candidate.bbox) &&
+            candidate.bbox.length === 4 &&
+            candidate.bbox.every((n: unknown) => typeof n === "number" && Number.isFinite(n))
+              ? (candidate.bbox as [number, number, number, number])
+              : undefined,
         },
       });
       return NextResponse.json(result);

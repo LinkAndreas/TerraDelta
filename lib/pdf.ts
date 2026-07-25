@@ -371,6 +371,10 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     noteLines: string[];
     catLines: string[];
     ref: string;
+    // Runner-up catalog classifications ("∼ label 55%"), rendered small
+    // beneath the best match — the catalog mapping is often ambiguous, so the
+    // alternatives belong in the report rather than being dropped.
+    altLines: string[];
     coord: string;
     area: string;
     height: number;
@@ -379,10 +383,20 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(FONT_SIZE_ROW);
     const descLines: string[] = doc.splitTextToSize(c.description || "", colW.desc - 4);
-    const catLines: string[] = doc.splitTextToSize(localizedCategory(t, c.category), colW.cat - 3);
-    const ref = CATEGORY_REF[c.category as Category] ?? "";
+    const matches = c.matches ?? [];
+    const best = matches[0];
+    const catText = best
+      ? `${localizedCategory(t, best.category)} ${scoreLabel(best.fit)}`
+      : t("cat.unclassified");
+    const catLines: string[] = doc.splitTextToSize(catText, colW.cat - 3);
+    const ref = best ? CATEGORY_REF[best.category as Category] ?? "" : "";
 
     doc.setFontSize(FONT_SIZE_NOTE);
+    const altLines: string[] = matches
+      .slice(1)
+      .flatMap((m) =>
+        doc.splitTextToSize(`~ ${localizedCategory(t, m.category)} ${scoreLabel(m.fit)}`, colW.cat - 3),
+      );
     const noteLines: string[] = c.note ? doc.splitTextToSize(`↳ ${c.note}`, colW.desc - 4) : [];
 
     let coord = "";
@@ -394,10 +408,13 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     }
 
     const descBlockH = descLines.length * LINE_H + (noteLines.length ? noteLines.length * NOTE_LINE_H + 1 : 0);
-    const catBlockH = catLines.length * LINE_H + (ref ? REF_H + 0.5 : 0);
+    const catBlockH =
+      catLines.length * LINE_H +
+      (ref ? REF_H + 0.5 : 0) +
+      (altLines.length ? altLines.length * NOTE_LINE_H + 0.6 : 0);
     const coordBlockH = hasCoord ? 2 * COORD_LINE_H : 0;
     const contentH = Math.max(descBlockH, catBlockH, coordBlockH, 5);
-    return { descLines, noteLines, catLines, ref, coord, area, height: contentH + ROW_PAD * 2 };
+    return { descLines, noteLines, catLines, ref, altLines, coord, area, height: contentH + ROW_PAD * 2 };
   });
 
   // Count table pages
@@ -527,12 +544,19 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     setFont(doc, "bold", 7, WHITE);
     doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
 
-    // Category (localized, wrapped) + catalog ref beneath
+    // Category: best match + its fit % (localized, wrapped), catalog ref
+    // beneath, then the alternative classifications in small type.
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);
     rm.catLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, topY + li * LINE_H));
+    let catY = topY + rm.catLines.length * LINE_H;
     if (rm.ref) {
       setFont(doc, "normal", FONT_SIZE_NOTE, MID);
-      doc.text(rm.ref, COL_X.cat + 2, topY + rm.catLines.length * LINE_H + REF_H - 0.6);
+      doc.text(rm.ref, COL_X.cat + 2, catY + REF_H - 0.6);
+      catY += REF_H + 0.5;
+    }
+    if (rm.altLines.length) {
+      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
+      rm.altLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, catY + 0.6 + li * NOTE_LINE_H));
     }
 
     // Coordinates (center lat/lon + real-world area)

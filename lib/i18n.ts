@@ -11,6 +11,7 @@ export const STRINGS = {
   en: {
     "app.title": "TerraDelta",
     "app.tagline": "Orthophoto change detector",
+    "footer.copyright": "© {year} Andreas Link",
     "app.subtitle":
       "Compare two orthophotos of the same area and automatically find what changed — new or demolished buildings, roads, and land development — while ignoring season, lighting, and shadows.",
 
@@ -63,6 +64,7 @@ export const STRINGS = {
     "settings.testOk": "Connected — {n} models available.",
     "settings.testError": "Connection failed: {err}",
     "settings.modelNeedsKey": "Enter an API key above to choose a specific model.",
+    "settings.modelDefault": "Default model",
     "settings.section.effort": "Effort",
     "settings.section.effortDesc": "How many tokens Claude spends per call — higher effort trades speed and cost for deeper reasoning.",
     "settings.section.cost": "Cost display",
@@ -110,13 +112,18 @@ export const STRINGS = {
     "step.align": "Align",
     "step.detect": "Detect changes",
 
+    "substep.split": "Split into sections",
+    "substep.detect": "Find differences",
+    "substep.merge": "Merge duplicates",
+    "substep.classify": "Check & classify",
+
     "progress.initEngine": "Getting ready (first run takes a little longer)…",
     "progress.engineReady": "Ready.",
     "progress.aligning": "Aligning the two images…",
     "progress.splitting": "Splitting the image into close-up sections…",
     "progress.region": "Analyzing section {done}/{total}…",
     "progress.merging": "Combining results…",
-    "progress.verifying": "Double-checking change {done}/{total}…",
+    "progress.classifying": "Checking and classifying difference {done}/{total}…",
 
     "align.matched": "Images aligned ({n} matching points found)",
     "align.fallback": "Couldn't precisely align the images — results may be less accurate",
@@ -125,6 +132,8 @@ export const STRINGS = {
 
     "error.someFailed": "{failed} of {total} regions failed — results may be incomplete. Error: {err}",
     "error.allFailed": "{failed} of {total} regions failed. Error: {err}",
+    "error.classifyFailed":
+      "Differences were detected, but classification failed for {failed} of {total} of them — those are listed without a category. Error: {err}",
     "error.generic": "Something went wrong",
 
     "summary.heading": "Summary",
@@ -198,13 +207,13 @@ export const STRINGS = {
     "options.categoriesCount": "{n} of {total} categories",
 
     "veg.heading": "Include vegetation changes",
-    "veg.subheading": "Report durable land-cover changes (forest cleared, farmland afforested, a meadow built over). Turn off to suppress the whole vegetation/agriculture theme and its seasonal noise.",
+    "veg.subheading": "Off by default: vegetation is the noisiest theme (fields look different every year). Turn on to also report durable land-cover changes (forest cleared, farmland afforested, a meadow built over). Buildings, roads, and earthworks on former vegetation are always reported.",
     "veg.toggleTip": "Include or exclude Vegetation und Landwirtschaft (land-cover) changes.",
     "veg.summaryOff": "no vegetation",
 
     "category.heading": "Change type categories",
     "category.subheading":
-      "Pick whole object types or individual subtypes freely — the full Grundaktualität catalog is preselected below.",
+      "Pick whole object types or individual subtypes freely — the full Grundaktualität catalog is preselected below. Detection itself always looks for every difference; a difference is reported when any of its up-to-three fitting categories is selected here (or when the catalog has no type for it).",
     "category.groupTip": "Toggles every subtype below at once — individual subtypes stay adjustable.",
     "category.expand": "Show subtypes",
     "category.collapse": "Hide subtypes",
@@ -228,6 +237,9 @@ export const STRINGS = {
     "report.tipExportAll": "A single ZIP bundle with the PDF report, CSV, and (for GeoTIFF input) GeoJSON + KML.",
     "report.needsGeoTiffForExport": "GeoJSON and KML export (with coordinates) require GeoTIFF input — upload both images as GeoTIFFs to enable them.",
     "report.corroborated": "Corroborated by {n} detection passes",
+    "report.fitTip": "How well this catalog category fits the detected difference.",
+    "report.altCategoriesTip":
+      "Other catalog categories that also fit this difference, with their fit percentage — the best three are shown.",
     "report.exportMerkblatt": "Digital fact sheet (Merkblatt)",
     "report.tipExportMerkblatt": "A digital fact sheet (Merkblatt) for the restricted search area.",
 
@@ -423,11 +435,16 @@ export const STRINGS = {
     "cat.sonstige_merkmale.gewaesserstationierungsachse": "waterway stationing axis",
     "cat.sonstige_merkmale.sickerstrecke": "infiltration stretch",
 
+    "cat.unclassified": "unclassified",
+    "cat.unclassifiedTip":
+      "A real difference that no object type of the Grund-/Spitzenaktualisierung catalog describes. It is listed anyway rather than discarded.",
+
     "how.heading": "How it works",
     "how.1": "We automatically align both images so they line up precisely.",
     "how.2": "The image is broken into close-up sections so even small changes are visible.",
-    "how.3": "AI compares each section and identifies genuine changes — ignoring season, lighting, and shadows.",
-    "how.4": "Every result is double-checked, then highlighted and listed for you to review.",
+    "how.3": "AI compares each section and finds every physical difference — ignoring season, lighting, and shadows.",
+    "how.4":
+      "Every difference is re-checked up close and mapped to the object catalog — with up to three fitting categories and a confidence for each.",
 
     "onboard.heading": "Getting started",
     "onboard.subtitle": "Follow these steps to compare two orthophotos.",
@@ -452,6 +469,7 @@ export const STRINGS = {
   de: {
     "app.title": "TerraDelta",
     "app.tagline": "Veränderungserkennung für Orthophotos",
+    "footer.copyright": "© {year} Andreas Link",
     "app.subtitle":
       "Vergleichen Sie zwei Orthophotos derselben Fläche und finden Sie automatisch, was sich verändert hat — neue oder abgerissene Gebäude, Straßen und Landentwicklung — Jahreszeit, Licht und Schatten werden dabei ignoriert.",
 
@@ -504,6 +522,7 @@ export const STRINGS = {
     "settings.testOk": "Verbunden — {n} Modelle verfügbar.",
     "settings.testError": "Verbindung fehlgeschlagen: {err}",
     "settings.modelNeedsKey": "Geben Sie oben einen API-Schlüssel ein, um ein bestimmtes Modell zu wählen.",
+    "settings.modelDefault": "Standardmodell",
     "settings.section.effort": "Effort",
     "settings.section.effortDesc": "Wie viele Tokens Claude pro Aufruf aufwendet — höherer Effort tauscht Geschwindigkeit und Kosten gegen tieferes Schlussfolgern.",
     "settings.section.cost": "Kostenanzeige",
@@ -551,13 +570,18 @@ export const STRINGS = {
     "step.align": "Ausrichten",
     "step.detect": "Erkennen",
 
+    "substep.split": "In Ausschnitte zerlegen",
+    "substep.detect": "Unterschiede finden",
+    "substep.merge": "Duplikate zusammenführen",
+    "substep.classify": "Prüfen & klassifizieren",
+
     "progress.initEngine": "Wird vorbereitet (beim ersten Mal dauert es etwas länger)…",
     "progress.engineReady": "Bereit.",
     "progress.aligning": "Die beiden Bilder werden ausgerichtet…",
     "progress.splitting": "Bild wird in Ausschnitte zerlegt…",
     "progress.region": "Analysiere Ausschnitt {done}/{total}…",
     "progress.merging": "Ergebnisse werden zusammengeführt…",
-    "progress.verifying": "Überprüfe Veränderung {done}/{total}…",
+    "progress.classifying": "Prüfe und klassifiziere Unterschied {done}/{total}…",
 
     "align.matched": "Bilder ausgerichtet ({n} gefundene Übereinstimmungen)",
     "align.fallback": "Bilder konnten nicht präzise ausgerichtet werden — Ergebnisse evtl. ungenauer",
@@ -566,6 +590,8 @@ export const STRINGS = {
 
     "error.someFailed": "{failed} von {total} Regionen fehlgeschlagen — Ergebnisse evtl. unvollständig. Fehler: {err}",
     "error.allFailed": "{failed} von {total} Regionen fehlgeschlagen. Fehler: {err}",
+    "error.classifyFailed":
+      "Unterschiede wurden erkannt, aber die Klassifizierung ist bei {failed} von {total} fehlgeschlagen — diese sind ohne Kategorie aufgeführt. Fehler: {err}",
     "error.generic": "Etwas ist schiefgelaufen",
 
     "summary.heading": "Zusammenfassung",
@@ -639,13 +665,13 @@ export const STRINGS = {
     "options.categoriesCount": "{n} von {total} Kategorien",
 
     "veg.heading": "Vegetative Änderungen einbeziehen",
-    "veg.subheading": "Dauerhafte Landbedeckungsänderungen melden (Wald gerodet, Acker aufgeforstet, Wiese überbaut). Ausschalten, um das gesamte Thema Vegetation/Landwirtschaft samt saisonalem Rauschen zu unterdrücken.",
+    "veg.subheading": "Standardmäßig aus: Vegetation ist das rauschanfälligste Thema (Felder sehen jedes Jahr anders aus). Einschalten, um zusätzlich dauerhafte Landbedeckungsänderungen zu melden (Wald gerodet, Acker aufgeforstet, Wiese überbaut). Gebäude, Straßen und Erdarbeiten auf früherer Vegetation werden immer gemeldet.",
     "veg.toggleTip": "Änderungen der Vegetation und Landwirtschaft (Landbedeckung) ein- oder ausschließen.",
     "veg.summaryOff": "ohne Vegetation",
 
     "category.heading": "Veränderungstyp-Kategorien",
     "category.subheading":
-      "Ganze Objektarten oder einzelne Unterarten frei auswählen — der vollständige Grundaktualität-Katalog ist unten vorausgewählt.",
+      "Ganze Objektarten oder einzelne Unterarten frei auswählen — der vollständige Grundaktualität-Katalog ist unten vorausgewählt. Die Erkennung selbst sucht immer nach allen Unterschieden; ein Unterschied wird gemeldet, wenn eine seiner bis zu drei passenden Kategorien hier ausgewählt ist (oder wenn der Katalog keine Objektart dafür hat).",
     "category.groupTip": "Schaltet alle Unterarten darunter gemeinsam um — einzelne Unterarten bleiben anpassbar.",
     "category.expand": "Unterarten anzeigen",
     "category.collapse": "Unterarten verbergen",
@@ -669,6 +695,9 @@ export const STRINGS = {
     "report.tipExportAll": "Ein ZIP-Paket mit PDF-Bericht, CSV und (bei GeoTIFF-Eingabe) GeoJSON + KML.",
     "report.needsGeoTiffForExport": "GeoJSON- und KML-Export (mit Koordinaten) erfordern GeoTIFF-Eingabe — beide Bilder als GeoTIFF hochladen, um sie zu aktivieren.",
     "report.corroborated": "Durch {n} Erkennungsdurchläufe bestätigt",
+    "report.fitTip": "Wie gut diese Katalogkategorie zum erkannten Unterschied passt.",
+    "report.altCategoriesTip":
+      "Weitere Katalogkategorien, die ebenfalls zu diesem Unterschied passen, mit ihrer Passgenauigkeit — die besten drei werden angezeigt.",
     "report.exportMerkblatt": "Digitales Merkblatt",
     "report.tipExportMerkblatt": "Digitales Merkblatt für das eingeschränkte Suchgebiet.",
 
@@ -864,11 +893,16 @@ export const STRINGS = {
     "cat.sonstige_merkmale.gewaesserstationierungsachse": "Gewässerstationierungsachse",
     "cat.sonstige_merkmale.sickerstrecke": "Sickerstrecke",
 
+    "cat.unclassified": "nicht klassifiziert",
+    "cat.unclassifiedTip":
+      "Ein tatsächlicher Unterschied, für den es keine Objektart der Grund-/Spitzenaktualisierung gibt. Er wird trotzdem aufgeführt statt verworfen.",
+
     "how.heading": "So funktioniert es",
     "how.1": "Wir richten beide Bilder automatisch präzise aufeinander aus.",
     "how.2": "Das Bild wird in kleine Ausschnitte zerlegt, damit auch kleine Veränderungen erkannt werden.",
-    "how.3": "Eine KI vergleicht jeden Ausschnitt und erkennt echte Veränderungen — Jahreszeit, Licht und Schatten werden ignoriert.",
-    "how.4": "Jedes Ergebnis wird nochmals geprüft, hervorgehoben und übersichtlich zur Kontrolle aufgelistet.",
+    "how.3": "Eine KI vergleicht jeden Ausschnitt und erkennt jeden physischen Unterschied — Jahreszeit, Licht und Schatten werden ignoriert.",
+    "how.4":
+      "Jeder Unterschied wird aus der Nähe nochmals geprüft und dem Objektartenkatalog zugeordnet — mit bis zu drei passenden Kategorien samt Konfidenz.",
 
     "onboard.heading": "Erste Schritte",
     "onboard.subtitle": "Folgen Sie diesen Schritten, um zwei Orthophotos zu vergleichen.",

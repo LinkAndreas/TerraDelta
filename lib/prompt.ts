@@ -1,174 +1,202 @@
-// Shared prompt + parsing helpers for the detection/verification pipeline.
+// Shared prompt + parsing helpers for the detection/classification pipeline.
+//
+// The pipeline is deliberately split into two simple stages instead of one
+// catalog-constrained detector:
+//
+//   1. DETECT (this file's DETECT_SYSTEM) — find EVERY physical difference
+//      between the two dates. No catalog, no categories, no schema enum: the
+//      detector is not asked to decide whether a difference is "in scope",
+//      because that decision was the single biggest source of lost recall.
+//      Previously a real difference the model couldn't confidently pigeonhole
+//      into one of 62 catalog leaves was simply never emitted (the structured
+//      output enum made it literally unrepresentable), so it vanished before
+//      anyone could see it.
+//   2. CLASSIFY (CLASSIFY_SYSTEM) — for each difference found, on a zoomed
+//      crop: confirm it's genuine and MAP it onto the Grund-/Spitzen-
+//      aktualisierung catalog, returning up to MAX_CATEGORY_MATCHES fitting
+//      categories with a fit percentage each. Ambiguity is now reported
+//      instead of resolved by force, and a difference that fits nothing in the
+//      catalog is still kept (UNCLASSIFIED) rather than dropped.
 
 import {
   bandFromScore,
   CATEGORIES,
+  MAX_CATEGORY_MATCHES,
+  UNCLASSIFIED,
   type AnalyzeResult,
   type Category,
+  type CategoryMatch,
   type Change,
   type ChangeType,
+  type ClassifyResult,
   type TokenUsage,
-  type VerifyResult,
 } from "./types";
 
-// The full catalog description is reused verbatim across every run — the
-// model always sees all 62 object types, described together, so it can
-// disambiguate between neighboring/overlapping types correctly (e.g. a new
-// road's Straße area vs. its Straßenachse centerline). What changes per run
-// is which of those types it's actually allowed to REPORT (see
-// `scopeClause` below) — narrowing that down to the user's current
-// selection, instead of leaving the full 62-type catalog reportable on every
-// run regardless of selection, is what keeps a small Spitzenaktualisierung-
-// only run from drowning in noise/misclassifications against the 50 extra
-// Grundaktualisierung types the user never asked for.
-const CATALOG_SYSTEM = `You are a meticulous remote-sensing change-detection analyst working to the Baden-Württemberg Mini-OK BW object catalog (AS 7.1.2), reproduced in full below. It has two overlapping subsets:
-- "Spitzenaktualisierung" (priority currency) — 12 transport/utility network object types.
-- "Grundaktualisierung" (baseline currency) — all 62 object types, including those same 12 plus 50 more covering settlement areas, land use, water bodies, minor paths, structures, localities, and survey/reference features.
+// ── Stage 1: detection (catalog-free) ──────────────────────────────────────
+
+const DETECT_SYSTEM = `You are a meticulous remote-sensing change-detection analyst.
 
 You receive two images of the SAME geographic area (a region of an aerial orthophoto), captured at two different dates and already co-registered (pixel-aligned).
 - Image 1 = the EARLIER date.
 - Image 2 = the LATER date.
 
-GOAL: detect real-world changes to the catalog object types below with both HIGH PRECISION and HIGH RECALL — and NOTHING outside this catalog.
+GOAL: find EVERY real-world physical difference between the two dates. Do NOT classify the differences and do NOT judge whether they are "relevant" or worth mapping — a second stage maps each difference you report onto an official object catalog and re-checks it up close. Your one job here is RECALL: if something on the ground is physically different, report it.
 
-METHOD: Work systematically. Mentally divide the image into a grid and compare the two dates cell by cell. For each location ask: "Did one of the catalog object types below actually, physically change here?"
+METHOD: work systematically. Mentally divide the image into a grid and compare the two dates cell by cell. Then step back and compare the whole frame once more for large-area differences (a new development area, a quarry expansion, a whole new business park) that no single cell shows completely.
 
-REPORT ONLY these object types — use the EXACT category string shown for each.
+REPORT any physical difference on the ground, for example:
+- buildings, halls, sheds, carports appearing, disappearing, or being rebuilt/extended;
+- roads, paths, driveways, parking areas, paved surfaces built, widened, re-routed, or removed;
+- railway tracks or sidings laid or lifted; bridges, tunnels, underpasses, elevated roads built or removed;
+- masts, towers, wind turbines, power lines, tanks, conveyors erected or taken down;
+- water bodies, canals, or watercourses appearing, disappearing, widening, or narrowing;
+- earthworks, excavation, quarrying, pits, spoil heaps, graded terrain, new parcel layouts;
+- whole areas durably built over, cleared, or converted to another visible use (residential, commercial, sports/leisure, cemetery, mining).
 
-Spitzenaktualisierung (also part of Grundaktualisierung):
-- Straße: a road, path, driveway, or roundabout added, removed, widened, or newly paved (category "strasse").
-- Platz: a paved public area — pedestrian zone (category "platz.fussgaengerzone"), parking lot (category "platz.parkplatz"), rest area/lay-by (category "platz.rastplatz"), service station (category "platz.raststaette"), or truck stop (category "platz.autohof") — added, removed, or newly paved.
-- Bahnstrecke: a railway line, track, or siding added, removed, or realigned (category "bahnstrecke").
-- Flugverkehr: an airport/airfield — a runway, taxiway, apron, or hangar added, removed, or extended (category "flugverkehr.flughafen").
-- Fließgewässer: a canal newly dug or clearly widened/narrowed (category "fliessgewaesser.kanal").
-- Gewässerachse: a watercourse (river, stream, canal) whose width visibly changed enough to cross into a different width class — narrow ~3 m (category "gewaesserachse.breitenklasse_3"), medium ~6 m (category "gewaesserachse.breitenklasse_6"), or wide ~12 m+ (category "gewaesserachse.breitenklasse_12"). Judge width visually against a nearby scale reference (e.g. an adjacent road is typically 3-6 m wide) — this is a best-effort visual estimate, not a precise measurement; if genuinely unsure, use breitenklasse_6.
-- Bauwerk oder Anlage für Industrie- und Gewerbe: an industrial structure — wind turbine (category "industrie_gewerbebauwerk.windrad"), transmission tower/pylon (category "industrie_gewerbebauwerk.freileitungsmast"), or radio/telecom mast (category "industrie_gewerbebauwerk.funkmast") — newly erected or removed.
-- Leitung: an overhead power line newly strung or removed (category "leitung.freileitung").
-- Bauwerk im Verkehrsbereich: a transport structure — bridge (category "verkehrsbauwerk.bruecke"), elevated railway (category "verkehrsbauwerk.hochbahn"), elevated road (category "verkehrsbauwerk.hochstrasse"), tunnel (category "verkehrsbauwerk.tunnel"), or underpass (category "verkehrsbauwerk.unterfuehrung") — added, removed, or structurally modified.
-- Bahnverkehrsanlage: a rail facility — station building (category "bahnverkehrsanlage.bahnhof"), stop (category "bahnverkehrsanlage.haltestelle"), or halt (category "bahnverkehrsanlage.haltepunkt") — added, removed, or rebuilt.
-- Einrichtungen für den Schiffsverkehr: a landing stage/dock added, removed, or rebuilt (category "einrichtungen_schiffsverkehr.anleger").
-- Schifffahrtslinie, Fährverkehr: a car ferry terminal/ramp added, removed, or rebuilt (category "schifffahrtslinie_faehrverkehr.autofaehre").
+DO NOT report these — they are not physical differences on the ground:
+- lighting, sun angle, time of day, or shadow differences;
+- seasonal appearance of the SAME vegetation (leaf-on/off, color, growth stage) or one agricultural cycle on the same field (harvested, plowed, mown, a different crop this year);
+- cars, vehicles, or other temporary/movable objects;
+- water surface color, ripples, or reflections;
+- overall color / brightness / contrast / white-balance differences between captures;
+- residual misalignment (a structure shifted a few pixels but otherwise identical).
 
-Grundaktualisierung — the remaining 50 object types, grouped thematically:
+DISAMBIGUATION — bare/brown earth is the hardest case. Before reporting a durable land conversion, look for cues: new access paths, geometric parcel boundaries, foundations, building shells, staged material, graded terraces (→ genuine conversion, report it). Uniform furrows, crop rows, or a texture change with no such cues is just the agricultural cycle — do not report it.
 
-Siedlungsfläche (settlement areas): residential area ("siedlungsflaeche.wohnbauflaeche"), industrial/commercial area ("siedlungsflaeche.industrie_gewerbeflaeche"), spoil heap ("siedlungsflaeche.halde"), mining operation ("siedlungsflaeche.bergbaubetrieb"), open-pit mine/pit/quarry ("siedlungsflaeche.tagebau_grube_steinbruch"), mixed-use area ("siedlungsflaeche.flaeche_gemischter_nutzung"), area of special functional character ("siedlungsflaeche.flaeche_besonderer_funktionaler_praegung"), sports/leisure/recreation area ("siedlungsflaeche.sport_freizeit_erholungsflaeche"), or cemetery ("siedlungsflaeche.friedhof") newly established, converted to/from another use, or with a clearly changed boundary.
+DISAMBIGUATION — trees. Forest merely looking different (color, leaf-on/off, apparent density from the sun angle) is NOT a difference. But a footprint that was tree-covered on Image 1 and is bare, farmland, or built-up on Image 2 (the trees are gone, not just duller) IS one.
 
-Verkehr (transport, beyond the Spitzenaktualisierung objects above): road traffic area ("verkehr.strassenverkehr"), road axis ("verkehr.strassenachse"), carriageway axis ("verkehr.fahrbahnachse"), track axis ("verkehr.fahrwegachse"), rail traffic area ("verkehr.bahnverkehr"), or general shipping traffic area ("verkehr.schiffsverkehr_allgemein") added, removed, or realigned. Axes are centerline/reference geometry — report only if a genuinely new or removed physical route is visible, not a minor realignment of an unchanged one.
+ONE physical object, ONE entry. Report each changed object or area once, at the scale it actually exists: a new road is one entry, not one per segment; a new residential development is one entry for the area, plus separate entries only for objects inside it that are worth naming on their own (e.g. an access road, a large hall). Do not emit the same object twice at two different sizes.
 
-Vegetation und Landwirtschaft (land use — PERMANENT conversions only): agriculture ("vegetation_landwirtschaft.landwirtschaft"), forest ("vegetation_landwirtschaft.wald"), copse ("vegetation_landwirtschaft.gehoelz"), heathland ("vegetation_landwirtschaft.heide"), moor ("vegetation_landwirtschaft.moor"), swamp ("vegetation_landwirtschaft.sumpf"), or wasteland/unvegetated area ("vegetation_landwirtschaft.unland_vegetationslose_flaeche"). Only report a DURABLE conversion between these land-cover types — never a seasonal or single-cycle difference (a fallow field planted this year is NOT a change; a meadow permanently cleared into forest or built on IS).
+OUTPUT per difference:
+- change_type: "added" (present on Image 2, not on Image 1), "removed" (present on Image 1, gone on Image 2), or "modified" (present on both, physically altered);
+- description: concrete and specific — WHAT the object is and HOW it changed (e.g. "a paved parking area with marked bays built on former meadow", not "something changed");
+- confidence: an INTEGER 0-100 for how certain you are this is a genuine physical difference (0 = pure guess, 100 = unmistakable). Use the FULL range and pick specific values like 37, 62, 88 — not just round buckets. Roughly: 85-100 unmistakable, 55-84 likely, below 55 possible but uncertain;
+- bbox: a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image, hugging its actual extent on all four sides — no padding with unchanged context.
 
-Gewässer (water bodies, beyond Spitzenaktualisierung's Fließgewässer/Gewässerachse): watercourse ("gewaesser.wasserlauf"), canal ("gewaesser.kanal"), harbor basin ("gewaesser.hafenbecken"), or standing water body/lake ("gewaesser.stehendes_gewaesser") newly appearing, disappearing, or with a clearly changed extent — not a seasonal water-level or color change.
+Be thorough. Include small differences (a single new carport, one mast, a short driveway) and differences cut off at the image edge (report the visible part) — the image you see may be a zoomed crop of a larger map. If you are UNSURE whether something is a genuine difference, INCLUDE it with a low confidence (e.g. 25-45) rather than omitting it: a missed difference is worse than a low-confidence extra, and the second stage re-examines every candidate on a zoomed crop. Never invent a difference where only lighting, season, or the agricultural cycle differs. If nothing physically changed, return an empty changes array.
 
-Bauwerke und Anlagen (structures, beyond Spitzenaktualisierung's industrial/utility ones): tower ("bauwerke_anlagen.turm"), storage tank/reservoir structure ("bauwerke_anlagen.vorratsbehaelter_speicherbauwerk"), conveyor/transport facility ("bauwerke_anlagen.transportanlage"), sports/leisure structure ("bauwerke_anlagen.bauwerk_sport_freizeit_erholung"), historic structure ("bauwerke_anlagen.historisches_bauwerk"), or other structure ("bauwerke_anlagen.sonstiges_bauwerk") newly built or removed.
+Always reason region by region first, then output the differences — but keep that reasoning brief: a short clause per region actually worth mentioning (skip regions with nothing notable rather than narrating "no change here" for each one), not a full paragraph per grid cell. This image may be one of dozens analyzed in the same run, so terse, high-signal reasoning matters as much as thoroughness in the final list.`;
 
-Ortslagen und Häfen: a locality/place-name area ("ortslagen_haefen.ortslage"), harbor/port ("ortslagen_haefen.hafen"), lock/sluice ("ortslagen_haefen.schleuse"), or test site ("ortslagen_haefen.testgelaende") newly established or removed.
-
-Verkehrsbauwerke und -anlagen (beyond the Spitzenaktualisierung transport/rail/shipping structures above): road traffic facility ("verkehrsbauwerke_anlagen.strassenverkehrsanlage"), path/trail ("verkehrsbauwerke_anlagen.weg_pfad_steig"), cable car/suspension railway ("verkehrsbauwerke_anlagen.seilbahn_schwebebahn"), rail track ("verkehrsbauwerke_anlagen.gleis"), air traffic facility ("verkehrsbauwerke_anlagen.flugverkehrsanlage"), or water-area structure ("verkehrsbauwerke_anlagen.bauwerk_gewaesserbereich") added, removed, or rebuilt.
-
-Sonstige Merkmale (survey/reference features — report ONLY if an actual physical marker, monument, or mapped feature is visible, not an abstract line or point): vegetation feature ("sonstige_merkmale.vegetationsmerkmal"), water feature ("sonstige_merkmale.gewaessermerkmal"), polder ("sonstige_merkmale.polder"), network node ("sonstige_merkmale.netzknoten"), zero point/benchmark ("sonstige_merkmale.nullpunkt"), water level height marker ("sonstige_merkmale.wasserspiegelhoehe"), waterway stationing axis ("sonstige_merkmale.gewaesserstationierungsachse"), or infiltration stretch ("sonstige_merkmale.sickerstrecke") newly added or removed.
-
-DO NOT REPORT (outside the catalog — reporting these is an error):
-- Anything not covered by an object type listed above (e.g. an ordinary house or shed is NOT its own category here — only report it if it also forms/changes one of the area types above, like Siedlungsfläche).
-- Lighting, sun angle, time of day, or shadow differences.
-- Seasonal vegetation LOOK (leaf-on/off, color, growth stage on the SAME plants/cover) or a single-cycle agricultural change (harvested/plowed/mown/different crop this year) — only report Vegetation und Landwirtschaft if the land-cover TYPE durably changed.
-- Cars, vehicles, or other temporary/movable objects.
-- Water surface color, ripples, or reflections.
-- Overall color / brightness / contrast / white-balance differences between captures.
-- Minor residual misalignment (a structure shifted a few pixels but otherwise identical is NOT a change).
-
-DISAMBIGUATION — bare/brown earth is the hardest case for Vegetation und Landwirtschaft/Siedlungsfläche. Before reporting a durable conversion, check for cues: new access paths, geometric parcel boundaries, foundations, building shells, staged material, graded terraces (→ genuine conversion). Uniform furrows, crop rows, or a texture change with no such cues is just the agricultural cycle — do not report it.
-
-DISAMBIGUATION — forest/tree cover for Vegetation und Landwirtschaft. Forest merely looking different (color, leaf-on/off, density from the sun angle) across the two dates is NOT a change. But if the same footprint that was tree-covered on Image 1 is bare, farmland, or built-up on Image 2 (the trees are simply gone, not just duller), that IS a permanent removal.
-
-DISAMBIGUATION — ONE change, ONE category, even when several object types technically apply. Several catalog types describe the SAME physical route/area from different angles (an area type plus its own centerline/axis type covering the identical footprint): Straße/Straßenverkehr area vs. Straßenachse/Fahrbahnachse/Fahrwegachse axis; Bahnstrecke/Bahnverkehr area vs. the same rail line's Gleis; Schiffsverkehr area vs. Schifffahrtslinie. When a single new/removed/modified route or area would trigger more than one of these for the exact same footprint, report it ONCE under the single most specific type that actually matches what's visible (prefer the concrete object — e.g. Straße for a new paved road — over its generic traffic-area or axis counterpart) rather than emitting one entry per matching type. Do not manufacture a second entry for the same footprint just because another catalog type could technically also describe it.
-
-DISAMBIGUATION — a few catalog entries cover two named things under ONE code: "Raststätte, Autohof" (rest stop and truck stop share one type), "Hochbahn, Hochstraße" (elevated railway and elevated road share one type), and "Tunnel, Unterführung" (tunnel and underpass share one type). Where this app's category list splits such a pair into two separate reportable categories (e.g. "platz.raststaette" vs "platz.autohof"), pick whichever of the two names the pair's OWN description matches (truck stop → autohof, highway rest stop → raststaette; railway on the elevated structure → hochbahn, road on it → hochstrasse; passage under the ground → tunnel, passage under another route → unterfuehrung) — don't report both for the same object.
-
-OUTPUT per change: category (EXACTLY one of the strings above), change_type (added/removed/modified), a concise description of what changed, confidence (an INTEGER 0-100 estimating how certain you are the change is genuine: 0 = pure guess, 100 = unmistakable — use the FULL range and pick a specific value like 47, 63, 78, 92, not just round buckets; roughly: 85-100 unmistakable, 55-84 likely, below 55 possible-but-uncertain), and a TIGHT normalized [x, y, width, height] box around just the changed object on THIS image — hug the object's actual extent on all four sides, don't pad it with surrounding unchanged context.
-
-HIGH-PRIORITY, COMMONLY-MISSED AREA CHANGES — do not overlook these: a new residential development ("Neubaugebiet" → siedlungsflaeche.wohnbauflaeche) where former fields/meadows now show streets, parcels, and house shells; and new commercial/industrial buildings or halls ("Gewerbebauten" → siedlungsflaeche.industrie_gewerbeflaeche) — large roofs, logistics halls, or a whole new business park where there was open land. These often span several grid cells, so judge them at the whole-area level, not just cell by cell, and report the added area even when it's only partially inside your current view.
-
-Be thorough — list EVERY genuine change to a catalog object type, including small ones (a single new parking lot, a single mast, a short driveway). The image you see may be a zoomed crop of a larger map; a change partially cut off at the edge still counts — report the visible part. If you are UNSURE whether a candidate is genuine, include it with a low confidence score (e.g. 25-45) rather than omitting it — a missed real change is worse than a low-confidence extra. But never invent changes to object types outside this catalog, and never invent changes where only lighting, season, or the agricultural cycle differs. If nothing genuine changed, return an empty changes array.
-
-Always reason region by region first, then output the changes — but keep that reasoning brief: a short clause per region actually worth mentioning (skip regions with nothing notable rather than narrating "no change here" for each one), not a full paragraph per grid cell. This image may be one of dozens analyzed in the same run, so terse, high-signal reasoning matters as much as thoroughness in the final changes list.`;
-
-// Restricts what the detector is allowed to REPORT to the user's current
-// category selection, while the catalog description above (all 62 types) is
-// left intact so the model still has the surrounding context needed to tell
-// neighboring types apart. Without this, every run — even one scoped to
-// Spitzenaktualisierung's 12 object types by the UI's own category picker —
-// asked the model to also hunt for and disambiguate against the other 50
-// Grundaktualisierung types on every image, which both wasted output budget
-// on unwanted detections (later discarded client-side) and increased
-// misclassification risk on the types the user actually cares about, since
-// the model had to hold all 62 in mind at once regardless of selection.
-function scopeClause(enabledCategories: readonly Category[]): string {
-  if (enabledCategories.length >= CATEGORIES.length) {
-    return "\n\nSCOPE FOR THIS RUN: all catalog object types above are in scope — report changes for any of them.";
-  }
-  const list = enabledCategories.map((c) => `"${c}"`).join(", ");
-  return (
-    `\n\nSCOPE FOR THIS RUN: only these ${enabledCategories.length} of the ${CATEGORIES.length} catalog categories are in scope: [${list}]. ` +
-    "The full catalog above is reproduced only so you can correctly disambiguate borderline cases (e.g. telling an in-scope type apart from a similar-looking out-of-scope one) — but ONLY output changes whose category is in the in-scope list. " +
-    "Do NOT report a change to any catalog object type that is not in that list, even if you're confident it genuinely changed; treat it exactly like something outside the catalog entirely."
-  );
-}
-
-// Vegetation/land-use (Vegetation und Landwirtschaft) is opt-in via the
-// Options toggle. When included, we actively want durable land-cover changes
-// (clearing, afforestation, a meadow built over) surfaced — countering the
-// catalog's strong default bias against anything vegetation-related; when
-// excluded, we suppress that whole theme entirely so it can't add noise.
+// Vegetation/land-cover differences are opt-in via the Options toggle and OFF
+// by default: on most orthophoto pairs they are the noisiest theme (a field
+// looks different every single year), so a run that includes them buries the
+// built-environment differences most users are after. When the toggle is on we
+// actively want DURABLE land-cover conversions; when off, that whole theme is
+// suppressed at the detector — purely seasonal/single-cycle differences are
+// excluded either way (see DETECT_SYSTEM).
 function vegetationClause(includeVegetation: boolean): string {
   if (includeVegetation) {
     return (
-      "\n\nVEGETATION IS IN SCOPE FOR THIS RUN: actively report durable Vegetation und Landwirtschaft land-cover conversions — forest cleared to field or built-up, farmland turned to forest/scrub, a meadow permanently developed, a durable change of land-cover TYPE. Be generous with these (a genuine conversion is wanted even at medium/low confidence). Still exclude PURELY seasonal/single-cycle differences (leaf-on/off, a different crop or growth stage on the SAME cover) — those are never a change."
+      "\n\nVEGETATION/LAND-COVER IS IN SCOPE FOR THIS RUN: actively report durable land-cover conversions — forest cleared to field or built-up, farmland turned to forest/scrub, a meadow permanently developed, heath/moor/swamp drained or converted. Be generous with these (a genuine conversion is wanted even at medium/low confidence). Still exclude PURELY seasonal or single-cycle differences (leaf-on/off, a different crop or growth stage on the SAME cover) — those are never a difference."
     );
   }
   return (
-    "\n\nVEGETATION IS OUT OF SCOPE FOR THIS RUN: do NOT report any Vegetation und Landwirtschaft change (agriculture, forest, copse, heath, moor, swamp, wasteland) at all — treat that entire theme as outside the catalog for this run, even for an obvious durable land-cover conversion."
+    "\n\nVEGETATION/LAND-COVER IS OUT OF SCOPE FOR THIS RUN: do not report a difference whose ONLY content is a change of vegetation or agricultural land cover (field ↔ meadow ↔ forest ↔ scrub ↔ heath/moor/swamp ↔ bare ground). Report the difference anyway whenever something built or excavated is involved — a road, building, parking area, earthworks, water body, or any other man-made object appearing on former vegetation IS in scope and must be reported."
   );
 }
 
-export function buildSystem(
-  enabledCategories: readonly Category[],
-  opts?: { includeVegetation?: boolean },
-): string {
-  return CATALOG_SYSTEM + scopeClause(enabledCategories) + vegetationClause(opts?.includeVegetation ?? true);
+export function buildDetectSystem(opts?: { includeVegetation?: boolean }): string {
+  return DETECT_SYSTEM + vegetationClause(opts?.includeVegetation ?? false);
 }
 
-// Second-pass verifier: judges ONE candidate change on a zoomed-in crop.
-// The detector pass is tuned for recall; this pass restores precision.
-export const VERIFY_SYSTEM = `You are a strict remote-sensing change-detection verifier working to the same Baden-Württemberg Mini-OK BW object catalog as the detector: Spitzenaktualisierung's 12 transport/utility objects plus Grundaktualisierung's 50 additional object types (settlement areas, land use, water bodies, minor paths, structures, localities, survey/reference features).
+// ── Stage 2: classification onto the catalog + genuineness check ────────────
+
+// The full catalog, described once as a REFERENCE for the classifier (not as a
+// detection instruction list). All 62 object types are always available to the
+// classifier regardless of the user's category selection: mapping is more
+// accurate when the model can pick the truly best-fitting type, and the user's
+// selection is applied afterwards, client-side, against every reported match
+// (see app/page.tsx) instead of forcing a difference into an in-scope category
+// it doesn't actually belong to.
+const CATALOG_REFERENCE = `The Baden-Württemberg Mini-OK BW object catalog (AS 7.1.2) has two overlapping subsets:
+- "Spitzenaktualisierung" (priority currency) — 12 transport/utility object types.
+- "Grundaktualisierung" (baseline currency) — all 62 object types: those same 12 plus 50 more covering settlement areas, land use, water bodies, minor paths, structures, localities, and survey/reference features.
+
+CATEGORY REFERENCE — use the EXACT category string shown in parentheses.
+
+Spitzenaktualisierung (also part of Grundaktualisierung):
+- Straße: a road, path, driveway, or roundabout ("strasse").
+- Platz: a paved public area — pedestrian zone ("platz.fussgaengerzone"), parking lot ("platz.parkplatz"), rest area/lay-by ("platz.rastplatz"), service station ("platz.raststaette"), truck stop ("platz.autohof").
+- Bahnstrecke: a railway line, track, or siding ("bahnstrecke").
+- Flugverkehr: an airport/airfield — runway, taxiway, apron, hangar ("flugverkehr.flughafen").
+- Fließgewässer: a canal, newly dug or clearly widened/narrowed ("fliessgewaesser.kanal").
+- Gewässerachse: a watercourse whose width crossed into another width class — narrow ~3 m ("gewaesserachse.breitenklasse_3"), medium ~6 m ("gewaesserachse.breitenklasse_6"), wide ~12 m+ ("gewaesserachse.breitenklasse_12"). Judge width visually against a nearby scale reference (an adjacent road is typically 3-6 m wide); if genuinely unsure, use breitenklasse_6.
+- Bauwerk oder Anlage für Industrie- und Gewerbe: wind turbine ("industrie_gewerbebauwerk.windrad"), transmission tower/pylon ("industrie_gewerbebauwerk.freileitungsmast"), radio/telecom mast ("industrie_gewerbebauwerk.funkmast").
+- Leitung: an overhead power line ("leitung.freileitung").
+- Bauwerk im Verkehrsbereich: bridge ("verkehrsbauwerk.bruecke"), elevated railway ("verkehrsbauwerk.hochbahn"), elevated road ("verkehrsbauwerk.hochstrasse"), tunnel ("verkehrsbauwerk.tunnel"), underpass ("verkehrsbauwerk.unterfuehrung").
+- Bahnverkehrsanlage: station building ("bahnverkehrsanlage.bahnhof"), stop ("bahnverkehrsanlage.haltestelle"), halt ("bahnverkehrsanlage.haltepunkt").
+- Einrichtungen für den Schiffsverkehr: a landing stage/dock ("einrichtungen_schiffsverkehr.anleger").
+- Schifffahrtslinie, Fährverkehr: a car ferry terminal/ramp ("schifffahrtslinie_faehrverkehr.autofaehre").
+
+Grundaktualisierung — the remaining 50 object types, grouped thematically:
+
+Siedlungsfläche (settlement areas): residential area ("siedlungsflaeche.wohnbauflaeche"), industrial/commercial area ("siedlungsflaeche.industrie_gewerbeflaeche"), spoil heap ("siedlungsflaeche.halde"), mining operation ("siedlungsflaeche.bergbaubetrieb"), open-pit mine/pit/quarry ("siedlungsflaeche.tagebau_grube_steinbruch"), mixed-use area ("siedlungsflaeche.flaeche_gemischter_nutzung"), area of special functional character ("siedlungsflaeche.flaeche_besonderer_funktionaler_praegung"), sports/leisure/recreation area ("siedlungsflaeche.sport_freizeit_erholungsflaeche"), cemetery ("siedlungsflaeche.friedhof").
+
+Verkehr (transport, beyond the Spitzenaktualisierung objects above): road traffic area ("verkehr.strassenverkehr"), road axis ("verkehr.strassenachse"), carriageway axis ("verkehr.fahrbahnachse"), track axis ("verkehr.fahrwegachse"), rail traffic area ("verkehr.bahnverkehr"), general shipping traffic area ("verkehr.schiffsverkehr_allgemein"). Axes are centerline/reference geometry — only fitting when a genuinely new or removed physical route is visible.
+
+Vegetation und Landwirtschaft (land cover — DURABLE conversions only): agriculture ("vegetation_landwirtschaft.landwirtschaft"), forest ("vegetation_landwirtschaft.wald"), copse ("vegetation_landwirtschaft.gehoelz"), heathland ("vegetation_landwirtschaft.heide"), moor ("vegetation_landwirtschaft.moor"), swamp ("vegetation_landwirtschaft.sumpf"), wasteland/unvegetated area ("vegetation_landwirtschaft.unland_vegetationslose_flaeche").
+
+Gewässer (water bodies): watercourse ("gewaesser.wasserlauf"), canal ("gewaesser.kanal"), harbor basin ("gewaesser.hafenbecken"), standing water body/lake ("gewaesser.stehendes_gewaesser").
+
+Bauwerke und Anlagen (structures): tower ("bauwerke_anlagen.turm"), storage tank/reservoir structure ("bauwerke_anlagen.vorratsbehaelter_speicherbauwerk"), conveyor/transport facility ("bauwerke_anlagen.transportanlage"), sports/leisure structure ("bauwerke_anlagen.bauwerk_sport_freizeit_erholung"), historic structure ("bauwerke_anlagen.historisches_bauwerk"), other structure ("bauwerke_anlagen.sonstiges_bauwerk").
+
+Ortslagen und Häfen: locality/place-name area ("ortslagen_haefen.ortslage"), harbor/port ("ortslagen_haefen.hafen"), lock/sluice ("ortslagen_haefen.schleuse"), test site ("ortslagen_haefen.testgelaende").
+
+Verkehrsbauwerke und -anlagen: road traffic facility ("verkehrsbauwerke_anlagen.strassenverkehrsanlage"), path/trail ("verkehrsbauwerke_anlagen.weg_pfad_steig"), cable car/suspension railway ("verkehrsbauwerke_anlagen.seilbahn_schwebebahn"), rail track ("verkehrsbauwerke_anlagen.gleis"), air traffic facility ("verkehrsbauwerke_anlagen.flugverkehrsanlage"), water-area structure ("verkehrsbauwerke_anlagen.bauwerk_gewaesserbereich").
+
+Sonstige Merkmale (survey/reference features — only fitting if an actual physical marker, monument, or mapped feature is visible, not an abstract line or point): vegetation feature ("sonstige_merkmale.vegetationsmerkmal"), water feature ("sonstige_merkmale.gewaessermerkmal"), polder ("sonstige_merkmale.polder"), network node ("sonstige_merkmale.netzknoten"), zero point/benchmark ("sonstige_merkmale.nullpunkt"), water level height marker ("sonstige_merkmale.wasserspiegelhoehe"), waterway stationing axis ("sonstige_merkmale.gewaesserstationierungsachse"), infiltration stretch ("sonstige_merkmale.sickerstrecke").
+
+NOTE — three catalog entries cover two named things under one official code: "Raststätte, Autohof", "Hochbahn, Hochstraße", and "Tunnel, Unterführung". This list splits each pair into two categories; when a pair fits, prefer the one whose own name matches what's visible (truck stop → autohof, highway rest stop → raststaette; railway on the elevated structure → hochbahn, road on it → hochstrasse; passage under the ground → tunnel, passage under another route → unterfuehrung). Listing both of such a pair as alternatives is allowed when the images genuinely don't settle it.`;
+
+export const CLASSIFY_SYSTEM = `You are a remote-sensing analyst performing the second stage of a change-detection pipeline.
 
 You receive two zoomed-in crops of the SAME location from a co-registered aerial orthophoto pair:
 - Image 1 = the EARLIER date.
 - Image 2 = the LATER date.
-plus ONE candidate change (with its claimed category) that a first-pass detector claims to see here.
+plus ONE physical difference a first-stage detector reported here (its description and claimed direction). The detector worked WITHOUT any object catalog — it was only asked to spot differences.
 
-Your job: decide whether the claimed change is GENUINE — a real physical change matching the candidate's stated category.
+You have TWO jobs.
 
-Judge strictly. REJECT the candidate if:
-- the difference is only lighting, sun angle, or shadows;
-- the difference is only a seasonal look or a single-cycle agricultural change (same land-cover type, just a different crop/growth stage) — not a durable conversion;
-- it's cars or other movable objects;
-- it's only water color or reflections;
-- it's only a global color/brightness/white-balance difference;
-- it's only slight misalignment of an otherwise identical structure;
-- the object doesn't actually match its stated catalog category, or doesn't belong to the catalog at all.
+JOB 1 — CONFIRM the difference is real. On this zoomed crop you can see far more than the detector could. Set genuine = false ONLY if the reported difference is not a physical change on the ground, i.e. it is merely:
+- lighting, sun angle, or shadows;
+- a seasonal look or a single-cycle agricultural difference (same land cover, different crop/growth stage) rather than a durable change;
+- cars or other movable objects;
+- water color or reflections;
+- a global color/brightness/white-balance difference;
+- slight misalignment of an otherwise identical structure;
+- or simply not there at all (nothing in these crops differs the way described).
+Do NOT reject a difference merely because it is hard to name, small, partially cut off, or because no catalog category fits it well — that is what JOB 2's fit percentages and the "no category fits" case are for. If something on the ground genuinely differs between the two crops, genuine = true, even when the description was imprecise about what it is.
 
-CONFIRM the candidate if the specific catalog object type it claims genuinely changed as described — including a durable land-use conversion (Vegetation und Landwirtschaft) or a settlement-area conversion (Siedlungsfläche), since those ARE in scope.
+Also RE-JUDGE the direction: from the two crops, decide whether the object is newly present on the LATER image (added), gone on the LATER image (removed), or present on both but physically altered (modified). This may differ from the detector's claim.
 
-On this zoomed crop the direction of the change (added vs. removed vs. modified) is usually far clearer than it was in the coarse detection tile — so also RE-JUDGE the change_type: decide, from the two crops, whether the object was newly present on the LATER image (added), gone on the LATER image (removed), or present on both but structurally altered (modified). Report that as change_type; it may differ from the candidate's stated type if the detector got the direction wrong.
+JOB 2 — MAP the difference onto the object catalog below. EVERY difference gets a classification: you must always name one best-fitting category, and you may add up to ${MAX_CATEGORY_MATCHES - 1} alternatives (so at most ${MAX_CATEGORY_MATCHES} in total). Each carries a "fit" percentage: an INTEGER 0-100 for how confident you are that THIS category is the correct catalog classification of what you see.
+- There is NO "unclassified" and no "none of the above" option. The catalog is broad — settlement areas, transport, land cover, water, structures, localities, survey features — so something always applies at least loosely. If nothing fits well, still pick the closest category and give it a LOW fit (e.g. 15-35), and say in the "reason" that the fit is poor and why. A weak, honest classification is wanted; refusing to classify is not an option.
+- Useful catch-alls when a specific type doesn't fit: "bauwerke_anlagen.sonstiges_bauwerk" for a built structure with no better match, "siedlungsflaeche.flaeche_gemischter_nutzung" or "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung" for a built-up area with no better match, "vegetation_landwirtschaft.unland_vegetationslose_flaeche" for bare/cleared ground, "verkehrsbauwerke_anlagen.weg_pfad_steig" for a minor path or track.
+- If several categories plausibly apply — very common, because the catalog describes the same physical thing from different angles (an area type plus its own centerline/axis type: Straße vs. Straßenverkehr vs. Straßenachse; Bahnstrecke vs. Gleis; a new hall as Bauwerk vs. the Siedlungsfläche it forms) — give the best one as the primary and list the others as alternatives, with fits reflecting how well each matches (e.g. 71 primary, then 55 and 30). Prefer the more specific/concrete object type as the primary when several fit equally.
+- Only list an alternative that genuinely could be the right answer (fit roughly 20 or above). One confident category is better than three padded ones — if only one applies, return an empty alternatives array.
+- The fit percentages are independent judgements, not a probability distribution: they need not sum to 100.
+
+JOB 3 — TIGHTEN the box. The detector's rectangle came from a coarse, zoomed-out tile and is usually too large, too small, or slightly offset. On this crop you can see the object's true extent, so return a box that:
+- contains the ENTIRE changed object and nothing else — all four edges touching its outermost visible extent;
+- does NOT include unchanged surroundings, neighbouring buildings, adjacent fields, or the crop's context margin just because they are nearby;
+- covers the whole changed AREA for an area-scale change (a new development, a quarry expansion), but stops where the change stops — do not round it out to the whole crop;
+- tracks the object's real shape: a long thin road or power line gets a long thin box, not a square one;
+- is expressed in THIS crop's normalized coordinates (origin top-left), NOT in the coordinates of the original image.
+Never return the full crop ([0, 0, 1, 1]) as a shortcut — if the object genuinely fills the crop, still give its actual edges.
 
 Return:
 - genuine: true or false
-- confidence: an INTEGER 0-100 for how certain you are the change is genuine (85-100 unmistakable, 55-84 likely, below 55 possible); use a low value (e.g. 20) if rejecting
-- change_type: the correct direction of the change ("added" | "removed" | "modified") as judged from these two crops
-- bbox: if genuine, a TIGHT normalized [x, y, width, height] box around the changed object in THIS crop (origin top-left), hugging its actual extent; otherwise [0, 0, 0, 0]
-- reason: one short sentence explaining the verdict.`;
+- confidence: an INTEGER 0-100 for how certain you are the DIFFERENCE ITSELF is real (85-100 unmistakable, 55-84 likely, below 55 possible); use a low value (e.g. 20) if rejecting
+- change_type: "added" | "removed" | "modified", as re-judged from these crops
+- category: the single best-fitting catalog category (always required)
+- category_fit: an INTEGER 0-100 for how well that category fits
+- alternatives: 0 to ${MAX_CATEGORY_MATCHES - 1} objects { category, fit }, best first ([] when only one category applies)
+- bbox: if genuine, the tightened normalized [x, y, width, height] box per JOB 3; otherwise [0, 0, 0, 0]
+- reason: one short sentence explaining the verdict and the chosen classification (and, if the fit is poor, why).
 
-export function verifyLanguageInstruction(lang?: string): string {
+${CATALOG_REFERENCE}`;
+
+export function classifyLanguageInstruction(lang?: string): string {
   if (lang === "de") return ' Write the "reason" in German (Deutsch).';
   return "";
 }
@@ -178,22 +206,21 @@ export function verifyLanguageInstruction(lang?: string): string {
 export const JSON_INSTRUCTION = `Return ONLY a JSON object (no markdown, no commentary) with exactly this shape:
 {
   "analysis": "your brief region-by-region reasoning",
-  "summary": "1-3 sentence overview of the real changes",
+  "summary": "1-3 sentence overview of the physical differences found",
   "changes": [
     {
-      "category": one of ${JSON.stringify(CATEGORIES)},
       "change_type": "added" | "removed" | "modified",
-      "description": "what changed",
+      "description": "what physically changed",
       "confidence": <integer 0-100>,
       "bbox": [x, y, width, height]
     }
   ]
 }
-The bbox is normalized 0..1 with origin at the top-left of THIS image. If nothing genuine changed, "changes" must be an empty array.`;
+The bbox is normalized 0..1 with origin at the top-left of THIS image. If nothing physically changed, "changes" must be an empty array.`;
 
 export function languageInstruction(lang?: string): string {
   if (lang === "de") {
-    return " Write the 'description' and 'summary' field values in German (Deutsch). Keep 'category' and 'change_type' as the exact English enum values, and 'confidence' as an integer 0-100.";
+    return " Write the 'description' and 'summary' field values in German (Deutsch). Keep 'change_type' as the exact English enum values, and 'confidence' as an integer 0-100.";
   }
   return "";
 }
@@ -240,49 +267,102 @@ function clampScore(v: unknown): number {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
+// Build the match list from the classifier's required primary `category` plus
+// its optional `alternatives`. The primary always comes first (it is a required
+// enum field, so it is always present and always valid), alternatives are
+// sorted by fit, duplicates collapse to their highest fit, and the whole list
+// is capped at MAX_CATEGORY_MATCHES here rather than in the schema — array-size
+// constraints aren't supported by structured outputs (see CLASSIFY_SCHEMA).
+export function parseClassification(parsed: {
+  category?: unknown;
+  category_fit?: unknown;
+  alternatives?: unknown;
+}): CategoryMatch[] {
+  const best = new Map<Category, number>();
+
+  const primary = String(parsed.category ?? "");
+  const hasPrimary = CATEGORY_SET.has(primary);
+  if (hasPrimary) best.set(primary as Category, clampScore(parsed.category_fit));
+
+  const alternatives: CategoryMatch[] = [];
+  if (Array.isArray(parsed.alternatives)) {
+    for (const entry of parsed.alternatives) {
+      if (!entry || typeof entry !== "object") continue;
+      const cat = String((entry as Record<string, unknown>).category ?? "");
+      if (!CATEGORY_SET.has(cat)) continue;
+      const fit = clampScore((entry as Record<string, unknown>).fit);
+      const prev = best.get(cat as Category);
+      if (prev !== undefined) {
+        // Already listed (as the primary or an earlier alternative) — keep the
+        // higher fit rather than showing the same category twice.
+        if (fit > prev) best.set(cat as Category, fit);
+        continue;
+      }
+      best.set(cat as Category, fit);
+      alternatives.push({ category: cat as Category, fit });
+    }
+  }
+
+  // The primary stays first even if an alternative claims a higher fit — it is
+  // the model's own pick for "the" category, and reordering it would contradict
+  // the classification it committed to.
+  const ordered: CategoryMatch[] = hasPrimary
+    ? [{ category: primary as Category, fit: best.get(primary as Category)! }]
+    : [];
+  ordered.push(
+    ...alternatives
+      .map((m) => ({ category: m.category, fit: best.get(m.category)! }))
+      .sort((a, b) => b.fit - a.fit),
+  );
+  return ordered.slice(0, MAX_CATEGORY_MATCHES);
+}
+
 export function buildResult(
   parsed: { summary?: string; changes?: Array<Record<string, unknown>> },
   model: string,
   usage: TokenUsage,
 ): AnalyzeResult {
-  // The catalog is closed (no "other"/catch-all category), so an entry whose
-  // category the model got wrong can't be coerced into a valid bucket —
-  // drop it rather than mislabel it. Structured output already constrains
-  // this via the schema enum; this is a defensive backstop.
-  const changes: Change[] = (parsed.changes ?? [])
-    .filter((c) => CATEGORY_SET.has(String(c.category)))
-    .map((c, i) => {
-      const score = clampScore(c.confidence);
-      return {
-        id: `chg-${i + 1}`,
-        category: String(c.category),
-        change_type: TYPES.includes(c.change_type as ChangeType)
-          ? (c.change_type as ChangeType)
-          : "modified",
-        description: String(c.description ?? ""),
-        score,
-        confidence: bandFromScore(score),
-        bbox: clampBox(c.bbox),
-      };
-    });
+  // Stage 1 emits no category at all — every difference it reports survives
+  // into stage 2, which is where catalog mapping happens. Nothing is dropped
+  // here on catalog grounds (that used to silently discard any difference the
+  // detector couldn't fit into the enum).
+  const changes: Change[] = (parsed.changes ?? []).map((c, i) => {
+    const score = clampScore(c.confidence);
+    return {
+      id: `chg-${i + 1}`,
+      category: UNCLASSIFIED,
+      matches: [],
+      change_type: TYPES.includes(c.change_type as ChangeType)
+        ? (c.change_type as ChangeType)
+        : "modified",
+      description: String(c.description ?? ""),
+      score,
+      confidence: bandFromScore(score),
+      bbox: clampBox(c.bbox),
+    };
+  });
   return { changes, summary: parsed.summary ?? "", model, usage };
 }
 
-export function buildVerifyResult(
+export function buildClassifyResult(
   parsed: {
     genuine?: unknown;
     confidence?: unknown;
     change_type?: unknown;
+    category?: unknown;
+    category_fit?: unknown;
+    alternatives?: unknown;
     bbox?: unknown;
     reason?: unknown;
   },
   usage: TokenUsage,
-): VerifyResult {
+): ClassifyResult {
   const score = clampScore(parsed.confidence);
   return {
     genuine: parsed.genuine === true,
     score,
     confidence: bandFromScore(score),
+    matches: parseClassification(parsed),
     // Only surface a corrected type when it's a valid enum value — otherwise
     // leave it undefined so the caller keeps the detector's original label.
     changeType: TYPES.includes(parsed.change_type as ChangeType)

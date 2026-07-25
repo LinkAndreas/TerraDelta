@@ -282,8 +282,12 @@ export default function UploadZone({ label, sublabel, url, onFile, disabled = fa
                 i
               </button>
               {infoOpen && (
+                // .file-info-panel keeps this fully opaque and left-aligned:
+                // it floats over the uploaded photo, so any translucency (or
+                // the drop zone's inherited centered text) made it read as a
+                // ghost tooltip instead of a solid panel.
                 <div
-                  className="dropdown-menu"
+                  className="dropdown-menu file-info-panel"
                   style={{ top: "calc(100% + 6px)", right: 0, left: "auto", minWidth: 240, padding: 12, display: "grid", gap: 9 }}
                 >
                   <MetaRow label={t("upload.meta.format")} value={meta.ext.toUpperCase()} />
