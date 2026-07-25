@@ -251,7 +251,15 @@ export async function anthropicClassify(
 
   const params = {
     model: opts.model,
-    max_tokens: 2000,
+    // The classify JSON is small (a verdict, two or three categories, a box, one
+    // sentence) — but `max_tokens` caps THINKING PLUS response text, and current
+    // models think by default. At 2000 the hardest crops spent the entire budget
+    // reasoning and the response ended before any JSON was emitted: an empty
+    // text block and stop_reason "max_tokens", which surfaced as an unparseable
+    // (blank) response. The cap is a ceiling, not a reservation — only what the
+    // model actually generates is billed — so it's set well above what the
+    // answer needs, and effort is what really governs the spend.
+    max_tokens: 12000,
     // CLASSIFY_SYSTEM carries the full catalog reference and is identical for
     // every candidate in a run, so caching it means only the first classify
     // call pays for those tokens.
@@ -295,6 +303,20 @@ export async function anthropicClassify(
   try {
     parsed = JSON.parse(stripFences(raw));
   } catch {
+    // Name the two distinguishable causes instead of echoing a raw snippet that
+    // is empty in exactly the case that matters. An empty response with a
+    // "max_tokens" stop means the budget went entirely on reasoning; an empty
+    // response otherwise means the model returned no text block at all.
+    if (response.stop_reason === "max_tokens") {
+      throw new Error(
+        "The model used its whole token budget on this candidate before returning the classification. Try a lower reasoning effort, or re-run.",
+      );
+    }
+    if (!raw) {
+      throw new Error(
+        `Claude returned no text to parse for this candidate (stop_reason: ${response.stop_reason ?? "unknown"}).`,
+      );
+    }
     throw new Error("Claude did not return valid JSON. Raw: " + raw.slice(0, 300));
   }
   return buildClassifyResult(parsed, usage);
