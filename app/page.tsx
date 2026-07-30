@@ -18,6 +18,7 @@ import {
   changeInSearchArea,
   changeInAnyDimPoint,
   dimPointRects,
+  dimPointToNormalizedRect,
   placedDimPoints,
   geoRefBounds,
   type NormalizedRect,
@@ -25,7 +26,7 @@ import {
 import {
   DEFAULT_COORD_SYSTEM,
   DEFAULT_EXPORT_CRS,
-  coordSystemForLonLat,
+  coordSystemForProj4,
   type CoordSystem,
 } from "@/lib/crs";
 import {
@@ -58,7 +59,7 @@ import {
   type SupportedModels,
   type TokenUsage,
 } from "@/lib/types";
-import { DEFAULT_SEARCH_MODE } from "@/lib/types";
+import { DEFAULT_SEARCH_MODE, dimPointHint } from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
 
@@ -143,7 +144,7 @@ export default function Home() {
   // actually falls in — the user should not have to work out that a Baden-
   // Württemberg orthophoto is zone 32N. Only seeds the zone/hemisphere; the
   // chosen format (and any manual zone edit afterwards) is left alone.
-  const [zoneSeeded, setZoneSeeded] = useState(false);
+  const [crsSeeded, setZoneSeeded] = useState(false);
 
   const [stage, setStage] = useState<Stage>("idle");
   // Which sub-step of the analyzing stage is running, and how far along it is
@@ -248,13 +249,25 @@ export default function Home() {
   }, [loaded, provider, model, keys, currency, effort]);
 
   useEffect(() => {
-    if (zoneSeeded || !refMeta?.geo) return;
+    if (crsSeeded || !refMeta?.geo) return;
     const { minLon, maxLon, minLat, maxLat } = geoRefBounds(refMeta.geo);
-    const seeded = coordSystemForLonLat((minLon + maxLon) / 2, (minLat + maxLat) / 2);
-    setEntryCrs((cs) => ({ ...cs, zone: seeded.zone, south: seeded.south }));
-    setExportCrs((cs) => ({ ...cs, zone: seeded.zone, south: seeded.south }));
+    const seeded = coordSystemForProj4(refMeta.geo.proj4Def, (minLon + maxLon) / 2, (minLat + maxLat) / 2);
+    setEntryCrs(seeded);
+    setExportCrs(seeded);
     setZoneSeeded(true);
-  }, [refMeta, zoneSeeded]);
+  }, [refMeta, crsSeeded]);
+
+  // Extent and coordinate system of the reference orthophoto, derived once and
+  // shared by the DIM import (which rejects out-of-scene points) and the CRS
+  // pickers (which mark the matching EPSG).
+  const imageInfo = useMemo(() => {
+    if (!refMeta?.geo) return null;
+    const b = geoRefBounds(refMeta.geo);
+    return {
+      bounds: { minLon: b.minLon, minLat: b.minLat, maxLon: b.maxLon, maxLat: b.maxLat },
+      epsg: coordSystemForProj4(refMeta.geo.proj4Def, (b.minLon + b.maxLon) / 2, (b.minLat + b.maxLat) / 2).epsg,
+    };
+  }, [refMeta]);
 
   const startRef = useRef(0);
   const busy = stage !== "idle";
@@ -399,6 +412,24 @@ export default function Home() {
         tasks = restricted.length > 0 ? restricted : tiles;
       }
 
+      // §5: in DIM-point mode the imported descriptions are prior knowledge
+      // about what may have changed at each location, so each region is
+      // analyzed together with the notes for the points it covers. The prompt
+      // frames them as orientation rather than evidence (see prompt.ts
+      // buildDetectHints) — a note must never conjure a change that isn't
+      // visible in the imagery.
+      const geoRef = refMeta?.geo;
+      const pointRects =
+        geoRef && activeDimPoints.length > 0
+          ? activeDimPoints.map((p) => ({ point: p, rect: dimPointToNormalizedRect(geoRef, p) }))
+          : [];
+      const hintsForTile = (tile: Tile): string[] =>
+        pointRects
+          .filter(({ rect }) => rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }))
+          .map(({ point }) => dimPointHint(point))
+          .filter((h) => h !== "")
+          .slice(0, 8);
+
       setPhase("detecting");
       setPhaseProgress({ done: 0, total: tasks.length });
       setProgressMsg(t("progress.region", { done: 0, total: tasks.length }));
@@ -447,6 +478,7 @@ export default function Home() {
                 lang,
                 effort,
                 includeVegetation,
+                hints: hintsForTile(tile),
               }),
             });
             const data = await res.json();
@@ -849,6 +881,8 @@ export default function Home() {
                 targetUrl={targetUrl}
                 refGeo={refMeta?.geo ?? null}
                 targetGeo={targetMeta?.geo ?? null}
+                imageBounds={imageInfo?.bounds}
+                imageEpsg={imageInfo?.epsg}
                 disabled={busy}
               />
 
@@ -1012,6 +1046,7 @@ export default function Home() {
             dimPoints={activeDimPoints}
             exportCrs={exportCrs}
             setExportCrs={setExportCrs}
+            imageEpsg={imageInfo?.epsg}
           />
         </>
       )}

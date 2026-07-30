@@ -8,10 +8,11 @@ import DimPointsPanel from "@/components/DimPointsPanel";
 import CoordSystemPicker from "@/components/CoordSystemPicker";
 import {
   axisLabels,
-  clampZone,
   coordDecimals,
   fromLonLat,
   parseEasting,
+  crsForZone,
+  isGeographic,
   toLonLat,
   type CoordSystem,
 } from "@/lib/crs";
@@ -44,6 +45,10 @@ interface Props {
   targetUrl: string | null;
   refGeo: GeoRef | null;
   targetGeo: GeoRef | null;
+  // Extent + coordinate system of the loaded orthophoto, used to reject
+  // out-of-scene DIM points and to preselect the matching EPSG.
+  imageBounds?: { minLon: number; minLat: number; maxLon: number; maxLat: number };
+  imageEpsg?: number;
   disabled?: boolean;
 }
 
@@ -67,6 +72,8 @@ export default function SearchAreaSection({
   targetUrl,
   refGeo,
   targetGeo,
+  imageBounds,
+  imageEpsg,
   disabled = false,
 }: Props) {
   const { t } = useI18n();
@@ -211,6 +218,8 @@ export default function SearchAreaSection({
             setEntryCrs={setEntryCrs}
             selectedId={selectedPointId}
             setSelectedId={setSelectedPointId}
+            imageBounds={imageBounds}
+            imageEpsg={imageEpsg}
             disabled={disabled}
           />
         </div>
@@ -234,7 +243,7 @@ export default function SearchAreaSection({
           <div className="row" style={{ gap: 28, marginTop: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 260px", display: "grid", gap: 14 }}>
               <GroupLabel icon="📍">{t("search.groupLocation")}</GroupLabel>
-              <CoordSystemPicker value={entryCrs} onChange={setEntryCrs} disabled={disabled} />
+              <CoordSystemPicker value={entryCrs} onChange={setEntryCrs} disabled={disabled} imageEpsg={imageEpsg} />
               <AreaCoordFields area={area} crs={entryCrs} onChange={update} disabled={disabled} />
               {!pointSet && (
                 <div className="muted" style={{ fontSize: 12 }}>
@@ -369,10 +378,14 @@ function AreaCoordFields({
     let ny = axis === "y" ? raw : y;
     let activeCrs = crs;
 
-    if (crs.format === "utm" && axis === "x") {
-      const { easting, zone } = parseEasting(raw);
+    if (!isGeographic(crs) && axis === "x") {
+      // Accept the German zone-prefixed easting ("32578636") in the field — it
+      // is what a DIM list carries. On a zE-N grid (EPSG:4647/5650) the prefix
+      // is part of the coordinate and is left alone; elsewhere it selects the
+      // matching zone's system for this entry.
+      const { easting, zone } = parseEasting(raw, crs);
       nx = easting;
-      if (zone !== null) activeCrs = { ...crs, zone: clampZone(zone) };
+      if (zone !== null) activeCrs = crsForZone(zone, crs);
     }
 
     if (!Number.isFinite(nx) || !Number.isFinite(ny)) {
@@ -386,19 +399,19 @@ function AreaCoordFields({
   return (
     <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
       <NumberField
-        label={crs.format === "wgs84" ? t("search.lon") : labels.x}
+        label={isGeographic(crs) ? t("search.lon") : labels.x}
         value={x}
         decimals={decimals}
-        placeholder={crs.format === "wgs84" ? t("search.lonPlaceholder") : t("search.eastingPlaceholder")}
+        placeholder={isGeographic(crs) ? t("search.lonPlaceholder") : t("search.eastingPlaceholder")}
         onCommit={(n) => commitAxis("x", n)}
         width={150}
         disabled={disabled}
       />
       <NumberField
-        label={crs.format === "wgs84" ? t("search.lat") : labels.y}
+        label={isGeographic(crs) ? t("search.lat") : labels.y}
         value={y}
         decimals={decimals}
-        placeholder={crs.format === "wgs84" ? t("search.latPlaceholder") : t("search.northingPlaceholder")}
+        placeholder={isGeographic(crs) ? t("search.latPlaceholder") : t("search.northingPlaceholder")}
         onCommit={(n) => commitAxis("y", n)}
         width={150}
         disabled={disabled}

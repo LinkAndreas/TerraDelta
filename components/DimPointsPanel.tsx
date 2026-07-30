@@ -5,14 +5,15 @@ import { useI18n, type StringKey } from "@/lib/i18n";
 import CoordSystemPicker from "@/components/CoordSystemPicker";
 import {
   axisLabels,
-  clampZone,
   coordDecimals,
   fromLonLat,
   parseEasting,
+  crsForZone,
+  isGeographic,
   toLonLat,
   type CoordSystem,
 } from "@/lib/crs";
-import { DIM_CSV_COLUMNS, DIM_CSV_TEMPLATE, parseDimCsv, type DimCsvResult } from "@/lib/dimCsv";
+import { DIM_CSV_COLUMNS, DIM_CSV_TEMPLATE, parseDimCsv, parseDimXlsx, type DimCsvResult } from "@/lib/dimCsv";
 import { DEFAULT_RADIUS_M, isDimPointPlaced, type DimPoint } from "@/lib/types";
 
 interface Props {
@@ -22,6 +23,11 @@ interface Props {
   setEntryCrs: (cs: CoordSystem) => void;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
+  // WGS84 extent of the loaded orthophoto; imported points outside it are
+  // dropped, since nothing in the image can ever be found at them.
+  imageBounds?: { minLon: number; minLat: number; maxLon: number; maxLat: number };
+  // EPSG the loaded orthophoto appears to use, surfaced in the picker.
+  imageEpsg?: number;
   disabled?: boolean;
 }
 
@@ -38,6 +44,8 @@ export default function DimPointsPanel({
   setEntryCrs,
   selectedId,
   setSelectedId,
+  imageBounds,
+  imageEpsg,
   disabled = false,
 }: Props) {
   const { t } = useI18n();
@@ -77,17 +85,27 @@ export default function DimPointsPanel({
     setImportError(null);
     setImportResult(null);
     try {
-      const text = await file.text();
-      const result = parseDimCsv(text, {
-        fallbackCrs: entryCrs.format === "utm" ? entryCrs : { ...entryCrs, format: "utm" },
+      const opts = {
+        fallbackCrs: entryCrs,
         defaultRadiusM: defaultRadius,
         idPrefix: `dim-${Date.now()}`,
-      });
+        imageBounds,
+      };
+      // Excel workbooks are read directly; everything else is treated as
+      // delimited text, which also covers .txt and .tsv exports.
+      const result = /\.xlsx$/i.test(file.name)
+        ? await parseDimXlsx(await file.arrayBuffer(), opts)
+        : parseDimCsv(await file.text(), opts);
       if (result.points.length === 0) {
+        const reason = result.errors[0]?.message;
         setImportError(
-          result.errors[0]?.message === "noCoordinateColumns"
+          reason === "noCoordinateColumns"
             ? t("dim.import.noColumns")
-            : t("dim.import.noRows"),
+            : reason === "badWorkbook"
+              ? t("dim.import.badWorkbook")
+              : result.outOfArea > 0
+                ? t("dim.import.allOutOfArea", { n: result.outOfArea })
+                : t("dim.import.noRows"),
         );
         setImportResult(result);
         return;
@@ -121,6 +139,7 @@ export default function DimPointsPanel({
           onChange={setEntryCrs}
           label={t("dim.entryCrs")}
           disabled={disabled}
+          imageEpsg={imageEpsg}
         />
 
         <label style={{ display: "grid", gap: 6 }}>
@@ -194,7 +213,7 @@ export default function DimPointsPanel({
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,text/csv,text/plain"
+          accept=".csv,.tsv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           style={{ display: "none" }}
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -225,6 +244,12 @@ export default function DimPointsPanel({
                   .map((e) => e.row)
                   .join(", "),
               })}
+            </span>
+          )}
+          {importResult.outOfArea > 0 && (
+            <span style={{ color: "var(--warn, #f59e0b)" }}>
+              {" · "}
+              {t("dim.import.outOfArea", { n: importResult.outOfArea })}
             </span>
           )}
           {importResult.warnings.includes("noRadiusColumn") && (
@@ -320,12 +345,14 @@ function PointRow({
     let ny = axis === "y" ? raw : y;
     let activeCrs = crs;
 
-    if (crs.format === "utm" && axis === "x") {
-      // Accept the German zone-prefixed easting ("32578636") in the field —
-      // it is what a DIM list carries, so retyping one should just work.
-      const { easting, zone } = parseEasting(raw);
+    if (!isGeographic(crs) && axis === "x") {
+      // Accept the German zone-prefixed easting ("32578636") in the field — it
+      // is what a DIM list carries. On a zE-N grid (EPSG:4647/5650) the prefix
+      // is part of the coordinate and is left alone; elsewhere it selects the
+      // matching zone's system for this entry.
+      const { easting, zone } = parseEasting(raw, crs);
       nx = easting;
-      if (zone !== null) activeCrs = { ...crs, zone: clampZone(zone) };
+      if (zone !== null) activeCrs = crsForZone(zone, crs);
     }
 
     if (!Number.isFinite(nx) || !Number.isFinite(ny)) {

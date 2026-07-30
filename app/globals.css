@@ -771,6 +771,61 @@ select.lang:hover {
    invisible hit target (the wrapper) so it's easy to grab without looking
    bulky. Rendered as plain HTML (not SVG) so it stays a true circle
    regardless of the underlying image's aspect ratio. */
+/* DIM point labels on the search-area preview. Rendered as HTML (not SVG
+   text) because the overlay SVG is stretched with preserveAspectRatio="none",
+   which would distort glyphs. The label shows the imported description and
+   truncates to one line; the full text is on the element's title attribute. */
+.dim-map-label {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(190px, 42%);
+  padding: 2px 6px 2px 3px;
+  border-radius: 999px;
+  background: rgba(12, 16, 24, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  backdrop-filter: blur(3px);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.dim-map-label:hover,
+.dim-map-label[data-selected="true"] {
+  background: rgba(12, 16, 24, 0.92);
+  border-color: var(--accent);
+  /* Let a hovered label grow past the one-line clamp so more of the
+     description is readable without waiting for the tooltip. */
+  max-width: min(340px, 78%);
+  z-index: 3;
+}
+
+.dim-map-label-num {
+  flex: 0 0 auto;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dim-map-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .map-handle-hit {
   position: absolute;
   width: 22px;

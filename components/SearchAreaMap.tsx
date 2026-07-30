@@ -10,7 +10,7 @@ import {
   searchAreaToOverlayShape,
   type NormalizedPoint,
 } from "@/lib/geo";
-import { formatLonLatIn, type CoordSystem } from "@/lib/crs";
+import { formatLonLatIn, isGeographic, type CoordSystem } from "@/lib/crs";
 import type { GeoRef, SearchArea } from "@/lib/types";
 
 interface Props {
@@ -101,7 +101,7 @@ export default function SearchAreaMap({
 
   const sizeCaption =
     area.shape === "circle" ? `⌀ ${Math.round(area.radiusM * 2)} m` : `${Math.round(area.widthM)} × ${Math.round(area.heightM)} m`;
-  const coordCaption = pointSet ? formatLonLatIn(crs, area.lon, area.lat, crs.format === "utm" ? 0 : 4) : "";
+  const coordCaption = pointSet ? formatLonLatIn(crs, area.lon, area.lat, isGeographic(crs) ? 4 : 0) : "";
 
   const handlePoints: [number, number][] | null = !overlay
     ? null
