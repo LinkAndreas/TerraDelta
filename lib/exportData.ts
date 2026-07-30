@@ -32,6 +32,7 @@ import {
   type GeoRef,
 } from "./types";
 import type { Lang } from "./i18n";
+import type { PdfFilterInfo } from "./pdf";
 
 // Everything an export needs beyond the changes themselves. Grouped into one
 // object because it is threaded through every format and the ZIP bundle.
@@ -387,6 +388,9 @@ export async function exportAll(
     refUrl: string;
     targetUrl: string;
     lang: Lang;
+    // Forwarded to the PDF so its numbering and filter note match the app.
+    displayNumbers?: number[];
+    filter?: PdfFilterInfo;
   } & ExportContext,
 ): Promise<void> {
   const { changes, refUrl, targetUrl, lang, geo, crs = DEFAULT_EXPORT_CRS, dimPoints } = opts;
@@ -395,7 +399,17 @@ export async function exportAll(
   const enc = new TextEncoder();
   const stamp = stampWithCrs(ctx);
 
-  const pdfBlob = await buildReportBlob({ refUrl, targetUrl, changes, lang, geo, crs, dimPoints });
+  const pdfBlob = await buildReportBlob({
+    refUrl,
+    targetUrl,
+    changes,
+    lang,
+    geo,
+    crs,
+    dimPoints,
+    displayNumbers: opts.displayNumbers,
+    filter: opts.filter,
+  });
   const entries = [
     { name: `terradelta-report-${stamp}.pdf`, data: new Uint8Array(await pdfBlob.arrayBuffer()) },
     { name: `terradelta-changes-${stamp}.csv`, data: enc.encode(csvString(changes, ctx)) },

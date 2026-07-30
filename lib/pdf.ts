@@ -69,7 +69,15 @@ export interface RenderedImage {
   ar: number; // width / height
 }
 
-export async function renderWithBoxes(srcUrl: string, changes: Change[], px: number): Promise<RenderedImage> {
+// `numbers` are the labels drawn in each box's badge. They must be the same
+// numbers the table and the on-screen report use — passing none falls back to
+// 1..N, which is only correct for an unfiltered export.
+export async function renderWithBoxes(
+  srcUrl: string,
+  changes: Change[],
+  px: number,
+  numbers?: number[],
+): Promise<RenderedImage> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -122,7 +130,7 @@ export async function renderWithBoxes(srcUrl: string, changes: Change[], px: num
         ctx.font = `bold ${Math.round(bH * 0.72)}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(i + 1), bx2 + bW / 2, by2 + bH / 2);
+        ctx.fillText(String(numbers?.[i] ?? i + 1), bx2 + bW / 2, by2 + bH / 2);
       }
 
       resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.92), ar });
@@ -140,6 +148,74 @@ export function setFont(doc: Doc, style: "normal" | "bold", size: number, color:
   doc.setFont("helvetica", style);
   doc.setFontSize(size);
   doc.setTextColor(...color);
+}
+
+// ── WinAnsi sanitizing ─────────────────────────────────────────────────────
+// jsPDF's built-in Helvetica is WinAnsi-encoded (Latin-1 plus the 0x80–0x9F
+// typographic extras). A character outside that set is emitted as a mojibake
+// pair rather than dropped — "↳" printed as "⁵" and "≥" as "\"e" in earlier
+// reports. This matters beyond our own labels: change descriptions come from
+// the vision model and DIM point names come from user CSVs, so arbitrary
+// Unicode can reach the page.
+//
+// Map the symbols we actually use (and the ones models reach for) onto WinAnsi
+// equivalents, then drop anything still unencodable — a missing rare glyph is
+// far less damaging in a printed report than two random letters in its place.
+const WINANSI_MAP: Record<string, string> = {
+  "↳": "»", "→": "->", "⇒": "=>", "←": "<-", "▸": "-", "▪": "-", "◦": "-", "·": "·",
+  "≥": ">=", "≤": "<=", "≈": "~", "≠": "!=", "±": "±", "∅": "O", "⌀": "O",
+  "−": "-", "‒": "-", "―": "—", "⁻": "-",
+  "✓": "+", "✔": "+", "✗": "x", "✘": "x", "★": "*", "☆": "*", "⚠": "!",
+  "㎡": "m²", "㎢": "km²", "″": '"', "′": "'", "‑": "-", " ": " ",
+};
+// Latin-1 (0x20–0xFF) plus the WinAnsi 0x80–0x9F block that jsPDF can encode.
+const WINANSI_EXTRAS = new Set("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ");
+
+export function winAnsi(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const mapped = WINANSI_MAP[ch];
+    if (mapped !== undefined) {
+      out += mapped;
+      continue;
+    }
+    const cp = ch.codePointAt(0)!;
+    if ((cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WINANSI_EXTRAS.has(ch)) {
+      out += ch;
+    }
+    // else: unencodable — omit rather than emit a mojibake pair.
+  }
+  return out;
+}
+
+// ── Text fitting ───────────────────────────────────────────────────────────
+// Every label in this report is a translated string, and German runs ~30%
+// longer than English ("Confidence" → "Konfidenz", "added" → "hinzugefügt").
+// A font size chosen to fit one language silently overflows in the other —
+// which is exactly how the coordinate header ended up printed across the
+// description column. These two helpers make a cell's width authoritative:
+// shrink to fit, and truncate only as a last resort.
+
+// Largest size in [min, start] at which `text` fits `maxW`, in the currently
+// selected font family/style. Leaves the chosen size selected on `doc`.
+export function fitFontSize(doc: Doc, text: string, maxW: number, start: number, min: number): number {
+  let size = start;
+  while (size > min) {
+    doc.setFontSize(size);
+    if (doc.getTextWidth(text) <= maxW) return size;
+    size -= 0.25;
+  }
+  doc.setFontSize(min);
+  return min;
+}
+
+// Truncate with an ellipsis so text can never bleed past its column, measured
+// in the font currently selected on `doc`.
+export function ellipsize(doc: Doc, text: string, maxW: number): string {
+  if (doc.getTextWidth(text) <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && doc.getTextWidth(`${s}…`) > maxW) s = s.slice(0, -1);
+  return `${s}…`;
 }
 
 export function drawPageHeader(
@@ -220,6 +296,20 @@ function localizedCategory(t: (k: StringKey) => string, category: string): strin
 // Returning the jsPDF doc (rather than saving inline) lets callers either
 // save it or hand its bytes to the combined ZIP export.
 
+// What the report was filtered down to, so the document can say so on its face.
+// A report that silently shows 12 of 27 detected changes is misleading — a
+// reviewer has no way to tell a clean run from a filtered view. `total` is the
+// unfiltered count; the rest describe which filters were active.
+export interface PdfFilterInfo {
+  total: number;
+  // Minimum confidence score the reader required (0 = no threshold).
+  minScore: number;
+  // Change types left enabled. All three = no type filtering.
+  types: ChangeType[];
+  // Free-text search term, "" when unused.
+  query: string;
+}
+
 export interface PdfBuildOptions {
   refUrl: string;
   targetUrl: string;
@@ -232,11 +322,29 @@ export interface PdfBuildOptions {
   // Present when the run was restricted to DIM points — the info box lists
   // them and the change table names the point each change was found at.
   dimPoints?: DimPoint[];
+  // The number each change carries in the on-screen report and on the
+  // comparison-view chips. Those number by position in the FULL result set, so
+  // a filtered export that renumbered 1..N would disagree with every other
+  // surface. Defaults to 1..N when the caller has nothing better.
+  displayNumbers?: number[];
+  // Present when `changes` is a filtered subset (§ drawFilterBand).
+  filter?: PdfFilterInfo;
 }
 
 async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
   const { default: jsPDF } = await import("jspdf");
-  const { refUrl, targetUrl, changes, lang, geo, searchArea, crs = DEFAULT_EXPORT_CRS, dimPoints } = opts;
+  const {
+    refUrl,
+    targetUrl,
+    changes,
+    lang,
+    geo,
+    searchArea,
+    crs = DEFAULT_EXPORT_CRS,
+    dimPoints,
+    filter,
+  } = opts;
+  const numberOf = (i: number) => opts.displayNumbers?.[i] ?? i + 1;
   const t = (key: StringKey, vars?: Record<string, string | number>) => translate(lang, key, vars);
   const hasCoord = !!geo;
   const hasDim = !!geo && !!dimPoints && dimPoints.length > 0;
@@ -246,11 +354,20 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
   const PX = 1000;
   const [logoPng, refImg, tgtImg] = await Promise.all([
     svgToPng(LOGO_SVG, 192),
-    renderWithBoxes(refUrl, changes, PX),
-    renderWithBoxes(targetUrl, changes, PX),
+    renderWithBoxes(refUrl, changes, PX, opts.displayNumbers),
+    renderWithBoxes(targetUrl, changes, PX, opts.displayNumbers),
   ]);
 
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  // Document metadata: what a PDF reader shows in its title bar and what a
+  // document-management system indexes on. Without it the file is titled after
+  // whatever the browser guessed.
+  doc.setProperties({
+    title: `TerraDelta — ${title}`,
+    subject: t("pdf.subtitle"),
+    author: "TerraDelta",
+    creator: "TerraDelta",
+  });
 
   // ── PAGE 1: header (+ optional search-area box) + both images ───────────
   const HEADER_H = 26;
@@ -313,7 +430,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     setFont(doc, "normal", 8, DARK);
     listed.forEach((p, i) => {
       const coord = formatLonLatIn(crs, p.lon, p.lat, crs.format === "wgs84" ? 6 : 0);
-      const name = doc.splitTextToSize(p.name || `#${i + 1}`, CW - 70)[0] ?? "";
+      const name = doc.splitTextToSize(winAnsi(p.name || `#${i + 1}`), CW - 70)[0] ?? "";
       doc.text(`${i + 1}. ${name}`, M + 3, infoY + 11.5 + i * 4.6);
       doc.text(`${coord} · r ${Math.round(p.radiusM)} m`, PW - M - 3, infoY + 11.5 + i * 4.6, { align: "right" });
     });
@@ -374,105 +491,23 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     lx += 40;
   }
   setFont(doc, "normal", 8.5, MID);
-  doc.text(`${changes.length} ${t("pdf.changes").toLowerCase()}`, PW - M, legendY + 0.8, { align: "right" });
+  // Dedicated string rather than lowercasing the section heading — German
+  // capitalizes nouns, so `t("pdf.changes").toLowerCase()` produced
+  // "27 erkannte veränderungen".
+  doc.text(t("pdf.changesCount", { n: changes.length }), PW - M, legendY + 0.8, { align: "right" });
 
   // ── TABLE ────────────────────────────────────────────────────────────────
-  // Column layout adapts to whether coordinates are available.
+  // Column widths are fixed; every cell measures its own text against them
+  // (fitFontSize / ellipsize) so nothing can print outside its column.
   const colW = {
-    num: 8,
+    num: 9,
     type: 20,
-    cat: 26,
+    cat: 29,
     coord: hasCoord ? 30 : 0,
-    conf: 15,
+    conf: 18,
     desc: 0,
   };
   colW.desc = CW - colW.num - colW.type - colW.cat - colW.coord - colW.conf;
-
-  const ROW_PAD = 2.2;
-  const LINE_H = 4.0;
-  const NOTE_LINE_H = 3.3;
-  const REF_H = 3.0;
-  const COORD_LINE_H = 3.4;
-  const FONT_SIZE_ROW = 8;
-  const FONT_SIZE_NOTE = 6.8;
-
-  const COMPACT_HEADER_H = 20;
-  const TABLE_HEADER_H = 8;
-  const STATS_BAND_H = 12;
-  const TABLE_START_Y_P2 = COMPACT_HEADER_H + 10 + STATS_BAND_H;
-  const PAGE_TABLE_H = PH - TABLE_START_Y_P2 - TABLE_HEADER_H - 14;
-
-  // Pre-measure every row (accurately — the doc exists, so splitTextToSize
-  // gives true line wraps for the current font size).
-  interface RowMeta {
-    descLines: string[];
-    noteLines: string[];
-    catLines: string[];
-    ref: string;
-    // Runner-up catalog classifications ("∼ label 55%"), rendered small
-    // beneath the best match — the catalog mapping is often ambiguous, so the
-    // alternatives belong in the report rather than being dropped.
-    altLines: string[];
-    coord: string;
-    dimName: string;
-    area: string;
-    height: number;
-  }
-  const rowMetas: RowMeta[] = changes.map((c) => {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(FONT_SIZE_ROW);
-    const descLines: string[] = doc.splitTextToSize(c.description || "", colW.desc - 4);
-    const matches = c.matches ?? [];
-    const best = matches[0];
-    const catText = best
-      ? `${localizedCategory(t, best.category)} ${scoreLabel(best.fit)}`
-      : t("cat.unclassified");
-    const catLines: string[] = doc.splitTextToSize(catText, colW.cat - 3);
-    const ref = best ? CATEGORY_REF[best.category as Category] ?? "" : "";
-
-    doc.setFontSize(FONT_SIZE_NOTE);
-    const altLines: string[] = matches
-      .slice(1)
-      .flatMap((m) =>
-        doc.splitTextToSize(`~ ${localizedCategory(t, m.category)} ${scoreLabel(m.fit)}`, colW.cat - 3),
-      );
-    const noteLines: string[] = c.note ? doc.splitTextToSize(`↳ ${c.note}`, colW.desc - 4) : [];
-
-    let coord = "";
-    let area = "";
-    let dimName = "";
-    if (geo) {
-      const [lon, lat] = changeCenterLonLat(geo, c);
-      coord = formatLonLatIn(crs, lon, lat, crs.format === "wgs84" ? 5 : coordDecimals(crs));
-      area = formatArea(changeAreaM2(geo, c), lang);
-      if (hasDim) dimName = dimPointForChange(geo, dimPoints!, c)?.name ?? "";
-    }
-
-    const descBlockH = descLines.length * LINE_H + (noteLines.length ? noteLines.length * NOTE_LINE_H + 1 : 0);
-    const catBlockH =
-      catLines.length * LINE_H +
-      (ref ? REF_H + 0.5 : 0) +
-      (altLines.length ? altLines.length * NOTE_LINE_H + 0.6 : 0);
-    const coordBlockH = hasCoord ? (dimName ? 3 : 2) * COORD_LINE_H : 0;
-    const contentH = Math.max(descBlockH, catBlockH, coordBlockH, 5);
-    return { descLines, noteLines, catLines, ref, altLines, coord, area, dimName, height: contentH + ROW_PAD * 2 };
-  });
-
-  // Count table pages
-  let tablePages = 0;
-  let usedH = 0;
-  for (const rm of rowMetas) {
-    if (usedH + rm.height > PAGE_TABLE_H) {
-      tablePages++;
-      usedH = rm.height;
-    } else {
-      usedH += rm.height;
-    }
-  }
-  tablePages++; // final partial page
-
-  const totalPages = 1 + tablePages;
-  drawPageFooter(doc, 1, totalPages, t);
 
   const COL_X = {
     num: M,
@@ -483,22 +518,166 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     conf: M + colW.num + colW.type + colW.cat + colW.coord + colW.desc,
   };
 
+  // Vertical rhythm. Every stacked block below is MEASURED and DRAWN with the
+  // same constants: a block's height is the sum of its line advances, and each
+  // line's baseline sits one ascent below that line's top. Measuring with one
+  // set of numbers and drawing with another is what made the catalog reference
+  // and the first alternative category overprint each other, and what let tall
+  // rows spill past their own background band.
+  const ROW_PAD = 2.4;
+  const LINE_H = 3.9; // 8pt body line
+  const SMALL_LINE_H = 3.1; // 6.6pt reference / alternative / note line
+  const COORD_LINE_H = 3.4;
+  const ASCENT = 2.85; // baseline offset within an 8pt line
+  const SMALL_ASCENT = 2.3;
+  const GAP_REF = 0.6; // space above the catalog reference
+  const GAP_ALT = 0.8; // space above the alternative-category block
+  const GAP_NOTE = 1.0; // space above the verifier note
+  const MIN_CONTENT_H = 6.4;
+
+  const FONT_SIZE_ROW = 8;
+  const FONT_SIZE_SMALL = 6.6;
+
+  const FOOTER_RESERVE = 14;
+  const COMPACT_HEADER_H = 20;
+  const STATS_BAND_H = 12;
+  const FILTER_BAND_H = 9;
+  const CONTINUED_CAPTION_H = 5;
+  // Two lines tall when there is a coordinate column, so the coordinate system
+  // can sit under its header instead of inside it.
+  const TABLE_HEADER_H = hasCoord ? 10.5 : 8.5;
+
+  // Is this export a subset of what was detected? Only then is the filter band
+  // drawn — an unfiltered report should not carry a caveat it doesn't need.
+  const filterActive =
+    !!filter &&
+    (filter.total > changes.length ||
+      filter.minScore > 0 ||
+      filter.types.length < 3 ||
+      filter.query.trim() !== "");
+
+  // Pre-measure every row: the doc exists, so splitTextToSize gives true wraps
+  // for the actual font size.
+  interface RowMeta {
+    descLines: string[];
+    noteLines: string[];
+    catLines: string[];
+    ref: string;
+    altLines: string[];
+    coordLines: string[];
+    height: number;
+  }
+
+  const rowMetas: RowMeta[] = changes.map((c) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_SIZE_ROW);
+    const descLines: string[] = doc.splitTextToSize(winAnsi(c.description || ""), colW.desc - 4);
+    const matches = c.matches ?? [];
+    const best = matches[0];
+    const catText = best
+      ? `${localizedCategory(t, best.category)} ${scoreLabel(best.fit)}`
+      : t("cat.unclassified");
+    const catLines: string[] = doc.splitTextToSize(winAnsi(catText), colW.cat - 4);
+    const ref = best ? CATEGORY_REF[best.category as Category] ?? "" : "";
+
+    doc.setFontSize(FONT_SIZE_SMALL);
+    const altLines: string[] = matches
+      .slice(1)
+      .flatMap((m) =>
+        doc.splitTextToSize(winAnsi(`~ ${localizedCategory(t, m.category)} ${scoreLabel(m.fit)}`), colW.cat - 4),
+      );
+    const noteLines: string[] = c.note ? doc.splitTextToSize(winAnsi(`↳ ${c.note}`), colW.desc - 4) : [];
+
+    const coordLines: string[] = [];
+    if (geo) {
+      const [lon, lat] = changeCenterLonLat(geo, c);
+      coordLines.push(formatLonLatIn(crs, lon, lat, crs.format === "wgs84" ? 5 : coordDecimals(crs)));
+      coordLines.push(formatArea(changeAreaM2(geo, c), lang));
+      if (hasDim) {
+        const point = dimPointForChange(geo, dimPoints!, c);
+        // Cap at two lines so one long DIM point name can't inflate every row.
+        if (point?.name) coordLines.push(...doc.splitTextToSize(winAnsi(point.name), colW.coord - 4).slice(0, 2));
+      }
+    }
+
+    const catH =
+      catLines.length * LINE_H +
+      (ref ? GAP_REF + SMALL_LINE_H : 0) +
+      (altLines.length ? GAP_ALT + altLines.length * SMALL_LINE_H : 0);
+    const descH =
+      descLines.length * LINE_H + (noteLines.length ? GAP_NOTE + noteLines.length * SMALL_LINE_H : 0);
+    const coordH = coordLines.length * COORD_LINE_H;
+
+    const contentH = Math.max(catH, descH, coordH, MIN_CONTENT_H);
+    return { descLines, noteLines, catLines, ref, altLines, coordLines, height: contentH + ROW_PAD * 2 };
+  });
+
+  // ── Pagination ───────────────────────────────────────────────────────────
+  // The first table page carries the section title, the stats band and (when
+  // filtered) the filter band; later pages start under a short "continued"
+  // caption. The page-count pass and the render loop both consume `pageOfRow`,
+  // so "Page n of m" cannot disagree with where rows actually land — they used
+  // to use two different break rules and the footer total could be wrong.
+  const TABLE_TOP_FIRST =
+    COMPACT_HEADER_H + 4 + 9 + STATS_BAND_H + 3 + (filterActive ? FILTER_BAND_H + 3 : 0);
+  const TABLE_TOP_REST = COMPACT_HEADER_H + 4 + CONTINUED_CAPTION_H;
+  const TABLE_BOTTOM = PH - FOOTER_RESERVE;
+
+  const pageOfRow: number[] = [];
+  {
+    let page = 0;
+    let y = TABLE_TOP_FIRST + TABLE_HEADER_H;
+    for (const rm of rowMetas) {
+      // The second clause keeps a row that is taller than a whole page from
+      // looping forever — it stays on the fresh page and overflows there.
+      if (y + rm.height > TABLE_BOTTOM && y > TABLE_TOP_REST + TABLE_HEADER_H) {
+        page++;
+        y = TABLE_TOP_REST + TABLE_HEADER_H;
+      }
+      pageOfRow.push(page);
+      y += rm.height;
+    }
+  }
+  const tablePages = pageOfRow.length ? pageOfRow[pageOfRow.length - 1] + 1 : 1;
+  const totalPages = 1 + tablePages;
+  drawPageFooter(doc, 1, totalPages, t);
+
+  // One header cell: shrink-to-fit, then ellipsize, so a long translation can
+  // never reach into its neighbour.
+  function headerCell(label: string, x: number, w: number, align: "left" | "center" | "right", baseline: number) {
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...WHITE);
+    fitFontSize(doc, label, w - 3, 8, 6);
+    const tx = align === "center" ? x + w / 2 : align === "right" ? x + w - 2 : x + 2;
+    doc.text(ellipsize(doc, label, w - 3), tx, baseline, { align });
+  }
+
   function drawTableHeader(y: number) {
     doc.setFillColor(...DARK);
     doc.rect(M, y, CW, TABLE_HEADER_H, "F");
-    setFont(doc, "bold", 8, WHITE);
-    const mid = y + TABLE_HEADER_H / 2 + 1.2;
-    doc.text(t("th.num"), COL_X.num + colW.num / 2, mid, { align: "center" });
-    doc.text(t("th.type"), COL_X.type + 2, mid);
-    doc.text(t("th.category"), COL_X.cat + 2, mid);
-    if (hasCoord) doc.text(`${t("th.coordinates")} (${crsEpsg(crs)})`, COL_X.coord + 2, mid);
-    doc.text(t("th.description"), COL_X.desc + 2, mid);
-    doc.text(t("th.conf"), COL_X.conf + 2, mid);
+    const baseline = y + (hasCoord ? 4.6 : TABLE_HEADER_H / 2 + 1.3);
+
+    headerCell(t("th.num"), COL_X.num, colW.num, "center", baseline);
+    headerCell(t("th.type"), COL_X.type, colW.type, "left", baseline);
+    headerCell(t("th.category"), COL_X.cat, colW.cat, "left", baseline);
+    if (hasCoord) headerCell(t("th.coordinates"), COL_X.coord, colW.coord, "left", baseline);
+    headerCell(t("th.description"), COL_X.desc, colW.desc, "left", baseline);
+    headerCell(t("th.conf"), COL_X.conf, colW.conf, "right", baseline);
+
+    // The coordinate system gets its own line beneath the column header:
+    // "Koordinaten (EPSG:25832)" on one line is wider than any sensible
+    // coordinate column and printed straight across the description column.
+    if (hasCoord) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(214, 202, 194);
+      doc.text(ellipsize(doc, crsEpsg(crs), colW.coord - 3), COL_X.coord + 2, y + 8.5);
+    }
   }
 
   // Summary-stats band (first table page only): counts by type + confidence,
-  // corroboration, and (with geo) total changed area — the "meaningful info"
-  // a reviewer wants at a glance.
+  // corroboration, and (with geo) total changed area — what a reviewer wants
+  // at a glance before reading any row.
   function drawStatsBand(y: number) {
     const byType: Record<ChangeType, number> = { added: 0, removed: 0, modified: 0 };
     const byConf: Record<Confidence, number> = { low: 0, medium: 0, high: 0 };
@@ -519,7 +698,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
       `${t("type.modified")}: ${byType.modified}`,
     ];
     setFont(doc, "normal", 8, DARK);
-    doc.text(parts.join("   ·   "), M + 3, y + 4.6);
+    doc.text(ellipsize(doc, parts.join("   ·   "), CW - 6), M + 3, y + 4.6);
 
     const line2 = [
       `${t("pdf.statHigh")}: ${byConf.high}`,
@@ -529,7 +708,34 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     ];
     if (geo) line2.push(`${t("pdf.statTotalArea")}: ${formatArea(totalArea, lang)}`);
     setFont(doc, "normal", 8, MID);
-    doc.text(line2.join("   ·   "), M + 3, y + 9.4);
+    doc.text(ellipsize(doc, line2.join("   ·   "), CW - 6), M + 3, y + 9.4);
+  }
+
+  // States plainly that this is a filtered view and which filters produced it.
+  // Without it, "27 changes" reads as "27 changes were detected" when it may
+  // really mean "27 of 41 passed my confidence threshold".
+  function drawFilterBand(y: number) {
+    const f = filter!;
+    doc.setFillColor(253, 243, 232);
+    doc.roundedRect(M, y, CW, FILTER_BAND_H, 2, 2, "F");
+
+    const bits: string[] = [];
+    if (f.minScore > 0) bits.push(t("pdf.filterMinConf", { n: f.minScore }));
+    if (f.types.length < 3) {
+      bits.push(
+        t("pdf.filterTypes", { list: f.types.map((tp) => t(`type.${tp}` as StringKey)).join(", ") }),
+      );
+    }
+    if (f.query.trim()) bits.push(t("pdf.filterQuery", { q: winAnsi(f.query.trim()) }));
+
+    const head = t("pdf.filtered", { n: changes.length, total: f.total });
+    setFont(doc, "bold", 7.5, DARK);
+    doc.text(head, M + 3, y + 5.6);
+    if (bits.length) {
+      const headW = doc.getTextWidth(head);
+      setFont(doc, "normal", 7.5, MID);
+      doc.text(ellipsize(doc, `— ${bits.join("  ·  ")}`, CW - 8 - headW), M + 5 + headW, y + 5.6);
+    }
   }
 
   let pageIdx = 2;
@@ -538,7 +744,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
 
   function startTablePage() {
     doc.addPage();
-    drawPageHeader(doc, logoPng, true, t, searchArea ? title : undefined);
+    drawPageHeader(doc, logoPng, true, t, searchArea || hasDim ? title : undefined);
     let y = COMPACT_HEADER_H + 4;
 
     if (firstTablePage) {
@@ -547,7 +753,15 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
       y += 9;
       drawStatsBand(y);
       y += STATS_BAND_H + 3;
+      if (filterActive) {
+        drawFilterBand(y);
+        y += FILTER_BAND_H + 3;
+      }
       firstTablePage = false;
+    } else {
+      setFont(doc, "normal", 8, MID);
+      doc.text(`${t("pdf.changes")} — ${t("pdf.tableContinued")}`, M, y + 3.4);
+      y = TABLE_TOP_REST;
     }
 
     drawTableHeader(y);
@@ -562,9 +776,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     const c = changes[i];
     const rm = rowMetas[i];
 
-    if (curY + rm.height > PH - 14) {
-      startTablePage();
-    }
+    if (i > 0 && pageOfRow[i] !== pageOfRow[i - 1]) startTablePage();
 
     if (i % 2 === 1) {
       doc.setFillColor(...TABLE_STRIPE);
@@ -572,64 +784,90 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     }
 
     const color = hex2rgb(CHANGE_COLORS[c.change_type]);
-    const rowMid = curY + rm.height / 2 + 1.1;
-    const topY = curY + ROW_PAD + LINE_H * 0.72;
+    const contentTop = curY + ROW_PAD;
+    const firstBaseline = contentTop + ASCENT;
 
-    // # column
+    // # — top-aligned with the rest of the row rather than vertically centred:
+    // on a tall row a centred number floats away from the text it labels.
     setFont(doc, "bold", FONT_SIZE_ROW, MID);
-    doc.text(String(i + 1), COL_X.num + colW.num / 2, rowMid, { align: "center" });
+    doc.text(String(numberOf(i)), COL_X.num + colW.num / 2, firstBaseline, { align: "center" });
 
-    // Type (colored pill)
+    // Type pill — the label is shrunk to fit rather than overflowing the pill
+    // ("hinzugefügt" is far wider than "added" at the same size).
+    const pillW = colW.type - 5;
+    const pillX = COL_X.type + 2;
     doc.setFillColor(...color);
-    doc.roundedRect(COL_X.type + 1, curY + rm.height / 2 - 2.5, colW.type - 4, 5, 1.5, 1.5, "F");
-    setFont(doc, "bold", 7, WHITE);
-    doc.text(t(`type.${c.change_type}` as StringKey), COL_X.type + (colW.type - 3) / 2, rowMid, { align: "center" });
+    doc.roundedRect(pillX, contentTop - 0.4, pillW, 5.2, 1.6, 1.6, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...WHITE);
+    const pillLabel = t(`type.${c.change_type}` as StringKey);
+    fitFontSize(doc, pillLabel, pillW - 2.5, 7, 5);
+    doc.text(ellipsize(doc, pillLabel, pillW - 2.5), pillX + pillW / 2, contentTop + 3.3, { align: "center" });
 
-    // Category: best match + its fit % (localized, wrapped), catalog ref
-    // beneath, then the alternative classifications in small type.
+    // Category: best match, catalog reference, then the alternatives. The
+    // cursor advances by whole line heights, so the reference can no longer
+    // land on top of the first alternative.
+    let catTop = contentTop;
     setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    rm.catLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, topY + li * LINE_H));
-    let catY = topY + rm.catLines.length * LINE_H;
+    for (const line of rm.catLines) {
+      doc.text(line, COL_X.cat + 2, catTop + ASCENT);
+      catTop += LINE_H;
+    }
     if (rm.ref) {
-      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
-      doc.text(rm.ref, COL_X.cat + 2, catY + REF_H - 0.6);
-      catY += REF_H + 0.5;
+      catTop += GAP_REF;
+      setFont(doc, "normal", FONT_SIZE_SMALL, MID);
+      doc.text(rm.ref, COL_X.cat + 2, catTop + SMALL_ASCENT);
+      catTop += SMALL_LINE_H;
     }
     if (rm.altLines.length) {
-      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
-      rm.altLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, catY + 0.6 + li * NOTE_LINE_H));
-    }
-
-    // Coordinates (center, in the selected coordinate system) + real-world
-    // area, and — in DIM-point mode — the point the change was found at.
-    if (hasCoord) {
-      setFont(doc, "normal", 7, DARK);
-      doc.text(rm.coord, COL_X.coord + 2, topY);
-      setFont(doc, "normal", FONT_SIZE_NOTE, MID);
-      doc.text(rm.area, COL_X.coord + 2, topY + COORD_LINE_H);
-      if (rm.dimName) {
-        doc.text(
-          doc.splitTextToSize(rm.dimName, colW.coord - 3)[0] ?? "",
-          COL_X.coord + 2,
-          topY + 2 * COORD_LINE_H,
-        );
+      catTop += GAP_ALT;
+      setFont(doc, "normal", FONT_SIZE_SMALL, MID);
+      for (const line of rm.altLines) {
+        doc.text(line, COL_X.cat + 2, catTop + SMALL_ASCENT);
+        catTop += SMALL_LINE_H;
       }
     }
 
-    // Description (wrapped) + verifier note beneath
-    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
-    rm.descLines.forEach((line, li) => doc.text(line, COL_X.desc + 2, topY + li * LINE_H));
-    if (rm.noteLines.length) {
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(FONT_SIZE_NOTE);
-      doc.setTextColor(...MID);
-      const noteY = topY + rm.descLines.length * LINE_H + 0.6;
-      rm.noteLines.forEach((line, li) => doc.text(line, COL_X.desc + 2, noteY + li * NOTE_LINE_H));
+    // Coordinates (in the selected system), real-world area, and — in
+    // DIM-point mode — the point the change was found at.
+    if (hasCoord) {
+      let coordTop = contentTop;
+      rm.coordLines.forEach((line, li) => {
+        if (li === 0) setFont(doc, "normal", 7.2, DARK);
+        else setFont(doc, "normal", FONT_SIZE_SMALL, MID);
+        doc.text(line, COL_X.coord + 2, coordTop + SMALL_ASCENT + 0.3);
+        coordTop += COORD_LINE_H;
+      });
     }
 
-    // Confidence (numeric score)
-    setFont(doc, "bold", FONT_SIZE_ROW, MID);
-    doc.text(scoreLabel(c.score), COL_X.conf + 2, rowMid);
+    // Description + the verifier's one-line rationale beneath it.
+    let descTop = contentTop;
+    setFont(doc, "normal", FONT_SIZE_ROW, DARK);
+    for (const line of rm.descLines) {
+      doc.text(line, COL_X.desc + 2, descTop + ASCENT);
+      descTop += LINE_H;
+    }
+    if (rm.noteLines.length) {
+      descTop += GAP_NOTE;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(FONT_SIZE_SMALL);
+      doc.setTextColor(...MID);
+      for (const line of rm.noteLines) {
+        doc.text(line, COL_X.desc + 2, descTop + SMALL_ASCENT);
+        descTop += SMALL_LINE_H;
+      }
+    }
+
+    // Confidence, right-aligned so the percentages form a readable column,
+    // with the corroboration count beneath (as the on-screen report shows it).
+    setFont(doc, "bold", FONT_SIZE_ROW, DARK);
+    doc.text(scoreLabel(c.score), COL_X.conf + colW.conf - 2, firstBaseline, { align: "right" });
+    if ((c.agreement ?? 1) >= 2) {
+      setFont(doc, "normal", FONT_SIZE_SMALL, MID);
+      doc.text(`${c.agreement}×`, COL_X.conf + colW.conf - 2, firstBaseline + SMALL_LINE_H + 0.6, {
+        align: "right",
+      });
+    }
 
     // Bottom border
     doc.setDrawColor(220, 218, 215);
@@ -652,6 +890,8 @@ export async function exportPdf(opts: {
   geo?: GeoRef | null;
   crs?: CoordSystem;
   dimPoints?: DimPoint[];
+  displayNumbers?: number[];
+  filter?: PdfFilterInfo;
 }): Promise<void> {
   const doc = await buildPdf(opts);
   doc.save(`terradelta-report-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -670,6 +910,8 @@ export async function exportMerkblatt(opts: {
   geo: GeoRef;
   crs?: CoordSystem;
   dimPoints?: DimPoint[];
+  displayNumbers?: number[];
+  filter?: PdfFilterInfo;
 }): Promise<void> {
   const doc = await buildPdf(opts);
   doc.save(`terradelta-merkblatt-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -685,6 +927,8 @@ export async function buildReportBlob(opts: {
   geo?: GeoRef | null;
   crs?: CoordSystem;
   dimPoints?: DimPoint[];
+  displayNumbers?: number[];
+  filter?: PdfFilterInfo;
 }): Promise<Blob> {
   const doc = await buildPdf(opts);
   return doc.output("blob");
