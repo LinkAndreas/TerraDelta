@@ -74,6 +74,18 @@ export default function ReportTable({
     .map((c, i) => ({ c, n: i + 1 }))
     .filter(({ c }) => visibleIds.has(c.id));
   const visibleChanges = rows.map(({ c }) => c);
+  // The numbers shown on screen and on the comparison-view chips: position in
+  // the FULL result set, not in the filtered subset. Exports carry these so a
+  // reviewer can cross-reference the PDF against the app (and against a CSV)
+  // instead of reconciling two different numbering schemes.
+  const visibleNumbers = rows.map(({ n }) => n);
+  // Describes the active filtering so the PDF can state that it is a subset.
+  const filterInfo = {
+    total: changes.length,
+    minScore,
+    types: TYPES.filter((tp) => typeFilter[tp]),
+    query,
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -98,7 +110,15 @@ export default function ReportTable({
     setExporting(true);
     try {
       const { exportPdf } = await import("@/lib/pdf");
-      await exportPdf({ refUrl, targetUrl, changes: visibleChanges, lang, ...exportCtx });
+      await exportPdf({
+        refUrl,
+        targetUrl,
+        changes: visibleChanges,
+        lang,
+        displayNumbers: visibleNumbers,
+        filter: filterInfo,
+        ...exportCtx,
+      });
     } finally {
       setExporting(false);
     }
@@ -130,7 +150,15 @@ export default function ReportTable({
     setExporting(true);
     try {
       const { exportAll } = await import("@/lib/exportData");
-      await exportAll({ changes: visibleChanges, refUrl, targetUrl, lang, ...exportCtx });
+      await exportAll({
+        changes: visibleChanges,
+        refUrl,
+        targetUrl,
+        lang,
+        displayNumbers: visibleNumbers,
+        filter: filterInfo,
+        ...exportCtx,
+      });
     } finally {
       setExporting(false);
     }
@@ -151,6 +179,8 @@ export default function ReportTable({
         geo: refGeo,
         crs: exportCrs,
         dimPoints,
+        displayNumbers: visibleNumbers,
+        filter: filterInfo,
       });
     } finally {
       setExporting(false);
