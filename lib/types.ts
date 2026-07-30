@@ -570,3 +570,54 @@ export interface SearchArea {
 }
 
 export const DEFAULT_RADIUS_M = 200;
+
+// ── DIM points (requires GeoTIFF input for both images) ───────────────────
+//
+// The second, independent way to say *where* to look: instead of one drawn
+// area, a list of individual points — typically imported from a DIM point
+// list (see lib/dimCsv.ts) — each with its own search radius. A change counts
+// as in scope when it falls inside ANY point's radius.
+//
+// Position is stored as WGS84 lon/lat like everything else in the app; the
+// coordinate system a point was *entered* or *imported* in (usually UTM) is a
+// presentation concern handled by lib/crs.ts, not part of the stored point.
+
+export type SearchMode = "area" | "points";
+export const DEFAULT_SEARCH_MODE: SearchMode = "area";
+
+export interface DimPoint {
+  // Stable key for React lists and for referring to a point in the UI —
+  // unrelated to any identifier in the source data.
+  id: string;
+  // Free-text label, from the CSV's "Beschreibung" column or typed by hand.
+  name: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  // Optional attributes carried over from an imported DIM list, shown in the
+  // point's detail row and in the Merkblatt/PDF. Purely informational — none
+  // of them affect the search.
+  note?: string;
+  nextReview?: string;
+  municipality?: string;
+  district?: string;
+  municipalityKey?: string;
+  lastUpdate?: string;
+}
+
+// A DIM point is geometrically a circular search area — reuse the SearchArea
+// math (containment, bounding rect, overlay shape) rather than duplicating it.
+export function dimPointToArea(p: DimPoint): SearchArea {
+  return {
+    shape: "circle",
+    lat: p.lat,
+    lon: p.lon,
+    radiusM: p.radiusM,
+    widthM: p.radiusM * 2,
+    heightM: p.radiusM * 2,
+  };
+}
+
+export function isDimPointPlaced(p: DimPoint): boolean {
+  return Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.radiusM > 0;
+}

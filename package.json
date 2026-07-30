@@ -11,7 +11,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.106.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@techstark/opencv-js": "^5.0.0-release.1",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2024.4.13",
@@ -32,10 +32,11 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.15",
+    "sharp": "^0.35.3"
   },
   "allowScripts": {
     "core-js@3.49.0": true,
-    "sharp@0.34.5": true
+    "sharp@0.35.3": true
   }
 }

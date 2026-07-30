@@ -12,7 +12,22 @@ import Onboarding from "@/components/Onboarding";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
-import { rectsOverlap, searchAreaToNormalizedRect, changeInSearchArea } from "@/lib/geo";
+import {
+  rectsOverlap,
+  searchAreaToNormalizedRect,
+  changeInSearchArea,
+  changeInAnyDimPoint,
+  dimPointRects,
+  placedDimPoints,
+  geoRefBounds,
+  type NormalizedRect,
+} from "@/lib/geo";
+import {
+  DEFAULT_COORD_SYSTEM,
+  DEFAULT_EXPORT_CRS,
+  coordSystemForLonLat,
+  type CoordSystem,
+} from "@/lib/crs";
 import {
   PROVIDER_KEYS,
   PROVIDERS,
@@ -36,11 +51,14 @@ import {
   type Change,
   type ChangeType,
   type Currency,
+  type DimPoint,
   type Effort,
   type SearchArea,
+  type SearchMode,
   type SupportedModels,
   type TokenUsage,
 } from "@/lib/types";
+import { DEFAULT_SEARCH_MODE } from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
 
@@ -106,8 +124,26 @@ export default function Home() {
   // concerns (where to look vs. what to look for) — kept as separate state,
   // each with its own dedicated UI section.
   const [searchAreaEnabled, setSearchAreaEnabled] = useState(false);
+  // The restriction has two independent modes (§1): one drawn area, or a list
+  // of DIM points each with its own radius. Both keep their own state so
+  // toggling between them never destroys the other's setup.
+  const [searchMode, setSearchMode] = useState<SearchMode>(DEFAULT_SEARCH_MODE);
   const [searchArea, setSearchArea] = useState<SearchArea | null>(null);
+  const [dimPoints, setDimPoints] = useState<DimPoint[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<Record<Category, boolean>>(defaultSelectedCategories);
+
+  // Coordinate systems (§2/§3): `entryCrs` is how the user writes and reads
+  // coordinates in the options panel, `exportCrs` is what the exports are
+  // written in. Independent by design — entering UTM and exporting WGS84 (or
+  // the reverse) is a normal combination. Positions themselves are always
+  // stored as WGS84 lon/lat; see lib/crs.ts.
+  const [entryCrs, setEntryCrs] = useState<CoordSystem>(DEFAULT_COORD_SYSTEM);
+  const [exportCrs, setExportCrs] = useState<CoordSystem>(DEFAULT_EXPORT_CRS);
+  // Once a georeferenced image is loaded, preselect the UTM zone its center
+  // actually falls in — the user should not have to work out that a Baden-
+  // Württemberg orthophoto is zone 32N. Only seeds the zone/hemisphere; the
+  // chosen format (and any manual zone edit afterwards) is left alone.
+  const [zoneSeeded, setZoneSeeded] = useState(false);
 
   const [stage, setStage] = useState<Stage>("idle");
   // Which sub-step of the analyzing stage is running, and how far along it is
@@ -211,19 +247,38 @@ export default function Home() {
     localStorage.setItem(STORE_KEY, JSON.stringify({ provider, model, keys, currency, effort }));
   }, [loaded, provider, model, keys, currency, effort]);
 
+  useEffect(() => {
+    if (zoneSeeded || !refMeta?.geo) return;
+    const { minLon, maxLon, minLat, maxLat } = geoRefBounds(refMeta.geo);
+    const seeded = coordSystemForLonLat((minLon + maxLon) / 2, (minLat + maxLat) / 2);
+    setEntryCrs((cs) => ({ ...cs, zone: seeded.zone, south: seeded.south }));
+    setExportCrs((cs) => ({ ...cs, zone: seeded.zone, south: seeded.south }));
+    setZoneSeeded(true);
+  }, [refMeta, zoneSeeded]);
+
   const startRef = useRef(0);
   const busy = stage !== "idle";
   // A search area isn't "active" until the user has actually picked a point —
   // lat/lon default to NaN ("unset") in SearchAreaSection until then, so a
-  // shape/size edit alone can't accidentally run the search at (0, 0).
+  // shape/size edit alone can't accidentally run the search at (0, 0). DIM
+  // points get the same treatment via `placedDimPoints`.
   const hasValidPoint = !!searchArea && Number.isFinite(searchArea.lat) && Number.isFinite(searchArea.lon);
-  const activeSearchArea = searchAreaEnabled && geoAvailable && hasValidPoint ? searchArea : null;
+  const restrictByArea = searchAreaEnabled && geoAvailable && searchMode === "area";
+  const restrictByPoints = searchAreaEnabled && geoAvailable && searchMode === "points";
+  const activeSearchArea = restrictByArea && hasValidPoint ? searchArea : null;
+  const activeDimPoints = useMemo(
+    () => (restrictByPoints ? placedDimPoints(dimPoints) : []),
+    [restrictByPoints, dimPoints],
+  );
+  // With the restriction switched on, the run needs somewhere to look — an
+  // enabled-but-empty restriction would otherwise silently mean "everywhere".
+  const restrictionReady = searchMode === "area" ? !!activeSearchArea : activeDimPoints.length > 0;
   const canRun =
     !!refUrl &&
     !!targetUrl &&
     !busy &&
     !formatMismatch &&
-    (!searchAreaEnabled || (geoAvailable && !!activeSearchArea)) &&
+    (!searchAreaEnabled || (geoAvailable && restrictionReady)) &&
     CATEGORIES.some((c) => selectedCategories[c]);
   const hasKey = !!keys[provider]?.trim();
   // What the model chip reads. The provider's fetched model list supplies the
@@ -250,11 +305,12 @@ export default function Home() {
     n: CATEGORIES.filter((c) => selectedCategories[c]).length,
     total: CATEGORIES.length,
   });
-  const areaSummary =
-    searchAreaEnabled && hasValidPoint && searchArea
-      ? searchArea.shape === "circle"
-        ? `⌀ ${Math.round(searchArea.radiusM * 2)} m`
-        : `${Math.round(searchArea.widthM)} × ${Math.round(searchArea.heightM)} m`
+  const areaSummary = activeSearchArea
+    ? activeSearchArea.shape === "circle"
+      ? `⌀ ${Math.round(activeSearchArea.radiusM * 2)} m`
+      : `${Math.round(activeSearchArea.widthM)} × ${Math.round(activeSearchArea.heightM)} m`
+    : activeDimPoints.length > 0
+      ? t("options.dimPoints", { n: activeDimPoints.length })
       : t("options.wholeImage");
   const optionsSummary = `${categorySummary} · ${areaSummary}${includeVegetation ? "" : ` · ${t("veg.summaryOff")}`}`;
 
@@ -323,11 +379,22 @@ export default function Home() {
       // §1: when the search area is enabled, only analyze regions that
       // overlap the requested area (using the reference image's GeoTIFF
       // georeferencing — see lib/geo.ts for why only the reference is needed).
-      const searchRect = activeSearchArea && refMeta?.geo ? searchAreaToNormalizedRect(refMeta.geo, activeSearchArea) : null;
+      // Both restriction modes reduce to the same thing here: a set of
+      // normalized rects on the reference image that a tile must overlap to be
+      // worth analyzing. One rect for the drawn area, one per DIM point (kept
+      // separate rather than merged into a hull — points can be kilometres
+      // apart, and their hull would cover the whole image and prune nothing).
+      const searchRects: NormalizedRect[] = refMeta?.geo
+        ? activeSearchArea
+          ? [searchAreaToNormalizedRect(refMeta.geo, activeSearchArea)]
+          : dimPointRects(refMeta.geo, activeDimPoints)
+        : [];
       let tasks: Tile[] = [overview, ...tiles];
-      if (searchRect) {
+      if (searchRects.length > 0) {
         const restricted = tiles.filter((tile) =>
-          rectsOverlap(searchRect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
+          searchRects.some((rect) =>
+            rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
+          ),
         );
         tasks = restricted.length > 0 ? restricted : tiles;
       }
@@ -419,9 +486,18 @@ export default function Home() {
       // never pay for an API call on a difference we're about to discard.
       // No category filtering happens at this point: the detections aren't
       // classified yet.
-      const merged = dedupe(results.flatMap((r) => r.changes)).filter(
-        (c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c),
-      );
+      // Whether a change survives the active restriction: inside the drawn
+      // area, or inside ANY DIM point's radius. Unrestricted runs (and
+      // non-georeferenced input, where no test is possible) keep everything.
+      const geo = refMeta?.geo;
+      const inSearchScope = (c: Change): boolean => {
+        if (!geo) return true;
+        if (activeSearchArea) return changeInSearchArea(geo, activeSearchArea, c);
+        if (activeDimPoints.length > 0) return changeInAnyDimPoint(geo, activeDimPoints, c);
+        return true;
+      };
+
+      const merged = dedupe(results.flatMap((r) => r.changes)).filter(inSearchScope);
 
       // Second pass: re-examine every candidate on a zoomed-in crop to (a)
       // confirm it's a real physical change and drop artifacts
@@ -540,7 +616,7 @@ export default function Home() {
       // area could refine to just outside it.
       const filtered = confirmed
         .filter(inScope)
-        .filter((c) => !activeSearchArea || !refMeta?.geo || changeInSearchArea(refMeta.geo, activeSearchArea, c))
+        .filter(inSearchScope)
         .map((c, i) => ({ ...c, id: `chg-${i + 1}` }));
 
       const failed = results.filter((r) => r.failed).length;
@@ -604,7 +680,10 @@ export default function Home() {
     setRefMeta(null);
     setTargetMeta(null);
     setSearchAreaEnabled(false);
+    setSearchMode(DEFAULT_SEARCH_MODE);
     setSearchArea(null);
+    setDimPoints([]);
+    setZoneSeeded(false);
     setAlign(null);
     setResult(null);
     setSelectedId(null);
@@ -705,6 +784,7 @@ export default function Home() {
               setRefMeta(meta);
               if (!meta.geo) {
                 setSearchArea(null);
+                setDimPoints([]);
                 setSearchAreaEnabled(false);
               }
             }}
@@ -719,6 +799,7 @@ export default function Home() {
               setTargetMeta(meta);
               if (!meta.geo) {
                 setSearchArea(null);
+                setDimPoints([]);
                 setSearchAreaEnabled(false);
               }
             }}
@@ -756,8 +837,14 @@ export default function Home() {
                 geoAvailable={geoAvailable}
                 enabled={searchAreaEnabled}
                 setEnabled={setSearchAreaEnabled}
+                mode={searchMode}
+                setMode={setSearchMode}
                 searchArea={searchArea}
                 setSearchArea={setSearchArea}
+                dimPoints={dimPoints}
+                setDimPoints={setDimPoints}
+                entryCrs={entryCrs}
+                setEntryCrs={setEntryCrs}
                 refUrl={refUrl}
                 targetUrl={targetUrl}
                 refGeo={refMeta?.geo ?? null}
@@ -904,6 +991,7 @@ export default function Home() {
               onSelect={setSelectedId}
               refGeo={refMeta?.geo}
               searchArea={activeSearchArea}
+              dimPoints={activeDimPoints}
             />
           </div>
           <ReportTable
@@ -921,6 +1009,9 @@ export default function Home() {
             targetUrl={align.targetUrl}
             refGeo={refMeta?.geo}
             merkblattArea={activeSearchArea}
+            dimPoints={activeDimPoints}
+            exportCrs={exportCrs}
+            setExportCrs={setExportCrs}
           />
         </>
       )}

@@ -38,7 +38,9 @@ in a filterable, exportable report.
 - **Artifact-focused rejection** — ignores lighting/season/shadows/crop cycles, vehicles and residual misalignment; nothing is rejected merely for being hard to categorize.
 - **Vegetation opt-in** — land-cover changes are off by default (the noisiest theme); buildings, roads and earthworks on former vegetation are always reported.
 - **Interactive comparison** — Earlier / Later / draggable **Slider** / **Side-by-side**, with colored overlays, a spotlight mode and numbered chips synced to the report.
-- **Filterable report** — by change type and confidence, with CSV export.
+- **Targeted search** — restrict the analysis to one drawn area, or to a list of **DIM points** with an individual radius each (entered by hand or imported from CSV).
+- **Coordinate systems** — enter and export coordinates as **WGS84 lat/lon** or **UTM** (zone + hemisphere), converted internally; the German zone-prefixed easting (`32578636`) is understood on import.
+- **Filterable report** — by change type and confidence, with CSV export in the coordinate system you pick.
 - **Bilingual** — English & **German** (default), including translated model output.
 - **Light / dark themes**, tooltips, and a guided onboarding flow.
 
