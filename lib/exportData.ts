@@ -21,7 +21,7 @@
 // geometry.
 
 import { changeAreaM2, changeBboxRingLonLat, changeCenterLonLat, dimPointForChange } from "./geo";
-import { crsEpsg, crsId, fromLonLat, coordDecimals, DEFAULT_EXPORT_CRS, type CoordSystem } from "./crs";
+import { crsEpsg, crsId, fromLonLat, coordDecimals, isGeographic, axisLabels, DEFAULT_EXPORT_CRS, type CoordSystem } from "./crs";
 import {
   CATEGORY_REF,
   CHANGE_COLORS,
@@ -171,7 +171,11 @@ function csvCell(v: string | number): string {
 // what the numbers are without consulting the crs column: lon/lat for WGS84,
 // utm_e/utm_n for UTM.
 function coordColumnNames(crs: CoordSystem): [string, string] {
-  return crs.format === "wgs84" ? ["lon", "lat"] : ["utm_e", "utm_n"];
+  if (isGeographic(crs)) return ["lon", "lat"];
+  // Axis captions come from the registry, so a Gauss-Krüger export is labelled
+  // rechtswert/hochwert rather than mislabelled utm_e/utm_n.
+  const { x, y } = axisLabels(crs);
+  return [x.toLowerCase(), y.toLowerCase()];
 }
 
 // CSV body as a string — shared by the direct download and the ZIP bundle.

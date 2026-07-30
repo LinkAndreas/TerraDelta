@@ -40,6 +40,8 @@ interface Props {
   // Coordinate system every exported coordinate is written in (§2/§3).
   exportCrs: CoordSystem;
   setExportCrs: (cs: CoordSystem) => void;
+  // EPSG the loaded orthophoto uses, marked in the export picker.
+  imageEpsg?: number;
 }
 
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
@@ -62,6 +64,7 @@ export default function ReportTable({
   dimPoints,
   exportCrs,
   setExportCrs,
+  imageEpsg,
 }: Props) {
   const { t, lang } = useI18n();
   const [exporting, setExporting] = useState(false);
@@ -272,6 +275,7 @@ export default function ReportTable({
                       value={exportCrs}
                       onChange={setExportCrs}
                       label={t("report.exportCrs")}
+                      imageEpsg={imageEpsg}
                     />
                     <div className="muted" style={{ fontSize: 11, marginTop: 8, maxWidth: 280, lineHeight: 1.5 }}>
                       {t("report.exportCrsNote", { crs: crsEpsg(exportCrs) })}

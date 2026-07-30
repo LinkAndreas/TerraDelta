@@ -20,7 +20,7 @@
 // back to the zone the user selected in the UI.
 
 import {
-  clampZone,
+  crsForZone,
   parseEasting,
   toLonLat,
   type CoordSystem,
@@ -215,51 +215,73 @@ export interface DimCsvResult {
   warnings: string[];
   // Which coordinate columns the file turned out to use.
   detectedFormat: "utm" | "wgs84" | null;
+  // How many rows were dropped because they lie outside the loaded orthophoto.
+  outOfArea: number;
 }
 
 export interface DimCsvOptions {
-  // Zone/hemisphere to assume for UTM coordinates that carry no zone prefix.
+  // Coordinate system to assume for projected coordinates that carry no zone
+  // prefix of their own.
   fallbackCrs: CoordSystem;
   // Radius for rows without a radius column of their own.
   defaultRadiusM?: number;
   // Prefix for generated point ids, so two imports don't collide.
   idPrefix?: string;
+  // WGS84 extent of the loaded orthophoto. A DIM list routinely covers a whole
+  // district while the imagery covers one municipality, so points outside the
+  // scene are dropped rather than imported as unreachable rows — nothing in
+  // the image can ever be found at them.
+  imageBounds?: { minLon: number; minLat: number; maxLon: number; maxLat: number };
 }
 
-export function parseDimCsv(text: string, opts: DimCsvOptions): DimCsvResult {
-  const { fallbackCrs, defaultRadiusM = DEFAULT_RADIUS_M, idPrefix = "dim" } = opts;
+// A point counts as inside when its SEARCH CIRCLE reaches the image, not just
+// its center: a point 50 m beyond the edge with a 200 m radius still covers
+// ground that is in the scene.
+function circleIntersectsBounds(
+  lon: number,
+  lat: number,
+  radiusM: number,
+  b: NonNullable<DimCsvOptions["imageBounds"]>,
+): boolean {
+  const dLat = radiusM / 111_320;
+  const dLon = radiusM / Math.max(1, 111_320 * Math.cos((lat * Math.PI) / 180));
+  return lon + dLon >= b.minLon && lon - dLon <= b.maxLon && lat + dLat >= b.minLat && lat - dLat <= b.maxLat;
+}
+
+// Rows (header first) → points. Shared by the CSV and XLSX paths so both
+// formats accept exactly the same columns and produce identical results.
+export function rowsToPoints(rows: string[][], opts: DimCsvOptions): DimCsvResult {
+  const { fallbackCrs, defaultRadiusM = DEFAULT_RADIUS_M, idPrefix = "dim", imageBounds } = opts;
   const errors: DimCsvIssue[] = [];
   const warnings: string[] = [];
 
-  const clean = text.replace(/^\ufeff/, "");
-  if (clean.trim() === "") {
-    return { points: [], errors: [{ row: 0, message: "empty" }], warnings, detectedFormat: null };
+  const dataRows = rows.filter((r) => r.some((c) => (c ?? "").trim() !== ""));
+  if (dataRows.length === 0) {
+    return { points: [], errors: [{ row: 0, message: "empty" }], warnings, detectedFormat: null, outOfArea: 0 };
   }
 
-  const rows = splitRows(clean, detectDelimiter(clean)).filter((r) => r.some((c) => c.trim() !== ""));
-  if (rows.length === 0) {
-    return { points: [], errors: [{ row: 0, message: "empty" }], warnings, detectedFormat: null };
-  }
-
-  const cols = mapHeaders(rows[0]);
-  const hasUtm = cols.easting !== -1 && cols.northing !== -1;
+  const cols = mapHeaders(dataRows[0]);
+  const hasProjected = cols.easting !== -1 && cols.northing !== -1;
   const hasLonLat = cols.lat !== -1 && cols.lon !== -1;
-  if (!hasUtm && !hasLonLat) {
+  if (!hasProjected && !hasLonLat) {
     return {
       points: [],
       errors: [{ row: 1, message: "noCoordinateColumns" }],
       warnings,
       detectedFormat: null,
+      outOfArea: 0,
     };
   }
-  // A file carrying both is read as UTM — that is the DIM list's native form,
-  // and lat/lon columns in such an export are a derived convenience copy.
-  const detectedFormat: "utm" | "wgs84" = hasUtm ? "utm" : "wgs84";
+  // A file carrying both is read as projected — that is the DIM list's native
+  // form, and lat/lon columns in such an export are a derived convenience copy.
+  const detectedFormat: "utm" | "wgs84" = hasProjected ? "utm" : "wgs84";
   if (cols.radius === -1) warnings.push("noRadiusColumn");
 
   const points: DimPoint[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
+  let outOfArea = 0;
+
+  for (let i = 1; i < dataRows.length; i++) {
+    const row = dataRows[i];
     const cell = (idx: number) => (idx === -1 ? "" : (row[idx] ?? "").trim());
     const rowNo = i + 1;
 
@@ -273,12 +295,10 @@ export function parseDimCsv(text: string, opts: DimCsvOptions): DimCsvResult {
         errors.push({ row: rowNo, message: "badCoordinate" });
         continue;
       }
-      const { easting, zone } = parseEasting(rawE);
-      const crs: CoordSystem = {
-        format: "utm",
-        zone: clampZone(zone ?? fallbackCrs.zone),
-        south: fallbackCrs.south,
-      };
+      const { easting, zone } = parseEasting(rawE, fallbackCrs);
+      // A zone prefix on the easting overrides the selected system for this
+      // row, staying within the same datum family (ETRS89 vs WGS84).
+      const crs: CoordSystem = zone !== null ? crsForZone(zone, fallbackCrs) : fallbackCrs;
       [lon, lat] = toLonLat(crs, easting, northing);
     } else {
       lat = parseNumber(cell(cols.lat));
@@ -297,6 +317,13 @@ export function parseDimCsv(text: string, opts: DimCsvOptions): DimCsvResult {
     const rawRadius = parseNumber(cell(cols.radius));
     const radiusM = Number.isFinite(rawRadius) && rawRadius > 0 ? rawRadius : defaultRadiusM;
 
+    // Counted, not reported per row: a district-wide list can put hundreds of
+    // points outside one orthophoto, and that is normal rather than an error.
+    if (imageBounds && !circleIntersectsBounds(lon, lat, radiusM, imageBounds)) {
+      outOfArea++;
+      continue;
+    }
+
     points.push({
       id: `${idPrefix}-${rowNo}`,
       name: cell(cols.name) || `#${points.length + 1}`,
@@ -312,7 +339,42 @@ export function parseDimCsv(text: string, opts: DimCsvOptions): DimCsvResult {
     });
   }
 
-  return { points, errors, warnings, detectedFormat };
+  return { points, errors, warnings, detectedFormat, outOfArea };
+}
+
+export function parseDimCsv(text: string, opts: DimCsvOptions): DimCsvResult {
+  const clean = text.replace(/^\ufeff/, "");
+  if (clean.trim() === "") {
+    return { points: [], errors: [{ row: 0, message: "empty" }], warnings: [], detectedFormat: null, outOfArea: 0 };
+  }
+  return rowsToPoints(splitRows(clean, detectDelimiter(clean)), opts);
+}
+
+// XLSX path: the workbook's first sheet, read as the same grid of strings the
+// CSV path produces. Date-formatted cells arrive as Excel serial numbers, so
+// the two date columns are converted back to a readable date — everything else
+// is left exactly as the sheet stores it.
+export async function parseDimXlsx(buf: ArrayBuffer, opts: DimCsvOptions): Promise<DimCsvResult> {
+  const { readXlsxRows, excelSerialToISO } = await import("./xlsx");
+  let rows: string[][];
+  try {
+    rows = await readXlsxRows(buf);
+  } catch {
+    return { points: [], errors: [{ row: 0, message: "badWorkbook" }], warnings: [], detectedFormat: null, outOfArea: 0 };
+  }
+  if (rows.length > 0) {
+    const cols = mapHeaders(rows[0]);
+    for (const idx of [cols.nextReview, cols.lastUpdate]) {
+      if (idx === -1) continue;
+      for (let r = 1; r < rows.length; r++) {
+        const raw = rows[r][idx];
+        if (!raw || !/^\d+(\.\d+)?$/.test(raw)) continue;
+        const iso = excelSerialToISO(Number(raw));
+        if (iso) rows[r][idx] = iso;
+      }
+    }
+  }
+  return rowsToPoints(rows, opts);
 }
 
 // The example shown behind the format info button, and the content of the

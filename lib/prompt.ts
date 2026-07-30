@@ -95,6 +95,32 @@ function vegetationClause(includeVegetation: boolean): string {
   );
 }
 
+// Operator notes for the DIM points that fall inside this region. These are
+// deliberately placed in the USER message rather than the system prompt: the
+// system prompt is cached across every tile of a run (see claude.ts
+// cachedSystem), and per-tile text there would invalidate that cache on every
+// single call.
+//
+// The framing matters more than the content. A note that says a building
+// permit was issued makes it very easy for a model to "see" the building —
+// so the block states explicitly that a note is not evidence, that plans
+// routinely go unbuilt, and that the notes neither replace nor restrict the
+// normal sweep of the image.
+export function buildDetectHints(hints: string[]): string {
+  if (hints.length === 0) return "";
+  const list = hints.map((h, i) => `${i + 1}. ${h}`).join("\n");
+  return `
+
+PRIOR KNOWLEDGE — the operator keeps records for specific locations inside this region, and these are the notes attached to them:
+${list}
+
+How to use these notes:
+- They tell you what KIND of change may be present here and are worth a closer look. Examine the areas they describe especially carefully.
+- They are NOT evidence. A note describes what was planned or last observed on the ground, not what these two images show. Planning procedures are routinely started and never built, and a note may be years out of date.
+- Report a difference ONLY if you can actually see it by comparing Image 1 and Image 2. Never report a change because a note leads you to expect it, and do not raise your confidence because a note agrees with you — confidence must reflect what is visible.
+- The notes do not limit your scope: sweep the whole region exactly as you normally would and report every other difference you find, including differences no note mentions.`;
+}
+
 export function buildDetectSystem(opts?: { includeVegetation?: boolean }): string {
   return DETECT_SYSTEM + vegetationClause(opts?.includeVegetation ?? false);
 }

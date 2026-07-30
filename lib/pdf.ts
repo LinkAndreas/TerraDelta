@@ -1,7 +1,7 @@
 import type { Category, Change, ChangeType, Confidence, DimPoint, GeoRef, SearchArea } from "./types";
 import { CATEGORY_REF, CHANGE_COLORS, scoreLabel } from "./types";
 import { changeAreaM2, changeCenterLonLat, dimPointForChange } from "./geo";
-import { crsEpsg, coordDecimals, formatLonLatIn, DEFAULT_EXPORT_CRS, type CoordSystem } from "./crs";
+import { crsEpsg, coordDecimals, formatLonLatIn, isGeographic, DEFAULT_EXPORT_CRS, type CoordSystem } from "./crs";
 import { translate, type Lang, type StringKey } from "./i18n";
 
 // ── DIN A4 constants (all in mm) ──────────────────────────────────────────
@@ -402,7 +402,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
 
     setFont(doc, "normal", 9, DARK);
     doc.text(
-      `${formatLonLatIn(crs, searchArea.lon, searchArea.lat, crs.format === "wgs84" ? 6 : coordDecimals(crs))}  (${crsEpsg(crs)})`,
+      `${formatLonLatIn(crs, searchArea.lon, searchArea.lat, isGeographic(crs) ? 6 : coordDecimals(crs))}  (${crsEpsg(crs)})`,
       M + 3,
       infoY + 12,
     );
@@ -429,7 +429,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
 
     setFont(doc, "normal", 8, DARK);
     listed.forEach((p, i) => {
-      const coord = formatLonLatIn(crs, p.lon, p.lat, crs.format === "wgs84" ? 6 : 0);
+      const coord = formatLonLatIn(crs, p.lon, p.lat, isGeographic(crs) ? 6 : 0);
       const name = doc.splitTextToSize(winAnsi(p.name || `#${i + 1}`), CW - 70)[0] ?? "";
       doc.text(`${i + 1}. ${name}`, M + 3, infoY + 11.5 + i * 4.6);
       doc.text(`${coord} · r ${Math.round(p.radiusM)} m`, PW - M - 3, infoY + 11.5 + i * 4.6, { align: "right" });
@@ -591,7 +591,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     const coordLines: string[] = [];
     if (geo) {
       const [lon, lat] = changeCenterLonLat(geo, c);
-      coordLines.push(formatLonLatIn(crs, lon, lat, crs.format === "wgs84" ? 5 : coordDecimals(crs)));
+      coordLines.push(formatLonLatIn(crs, lon, lat, isGeographic(crs) ? 5 : coordDecimals(crs)));
       coordLines.push(formatArea(changeAreaM2(geo, c), lang));
       if (hasDim) {
         const point = dimPointForChange(geo, dimPoints!, c);

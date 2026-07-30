@@ -17,6 +17,10 @@ export interface DetectRequest {
   // selection is applied client-side to the classified matches, so a real
   // difference is never lost just because it fell outside the current scope.
   includeVegetation?: boolean;
+  // Operator notes for the DIM points overlapping this region (§ prompt.ts
+  // buildDetectHints). Detection only — the classifier judges a candidate on
+  // its own merits, where a prior expectation would be confirmation bias.
+  hints?: string[];
 }
 
 export interface ClassifyRequest extends DetectRequest {
@@ -39,6 +43,7 @@ export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> 
     language: req.language,
     effort: req.effort,
     includeVegetation: req.includeVegetation,
+    hints: req.hints,
   });
 }
 

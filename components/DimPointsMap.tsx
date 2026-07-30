@@ -10,7 +10,7 @@ import {
   resizeSearchArea,
   type NormalizedPoint,
 } from "@/lib/geo";
-import { formatLonLatIn, type CoordSystem } from "@/lib/crs";
+import { formatLonLatIn, isGeographic, type CoordSystem } from "@/lib/crs";
 import { dimPointToArea, isDimPointPlaced, type DimPoint, type GeoRef } from "@/lib/types";
 
 interface Props {
@@ -224,26 +224,39 @@ export default function DimPointsMap({
                   y2={shape.cy * 100 + 2.2}
                   style={crosshairStyle}
                 />
-                <text
-                  x={shape.cx * 100}
-                  y={(shape.cy - shape.ry) * 100 - 1.2}
-                  textAnchor="middle"
-                  style={{
-                    fill: "#fff",
-                    fontSize: 3,
-                    fontWeight: 700,
-                    paintOrder: "stroke",
-                    stroke: "rgba(0,0,0,0.65)",
-                    strokeWidth: 0.8,
-                    pointerEvents: "none",
-                  }}
-                >
-                  {i + 1}
-                </text>
               </g>
             );
           })}
         </svg>
+
+        {/* Labels are HTML rather than SVG <text>: the overlay SVG uses
+            preserveAspectRatio="none", which stretches glyphs by the image's
+            aspect ratio. They also carry the point's full description as a
+            title, so a truncated label can be read in full on hover. */}
+        {placed.map((p, i) => {
+          const shape = dimPointToOverlayShape(geo, p);
+          if (shape.kind !== "ellipse") return null;
+          const label = p.name?.trim() || t("dim.unnamed");
+          const full = [label, p.note?.trim(), p.municipality, p.nextReview && `→ ${p.nextReview}`]
+            .filter(Boolean)
+            .join("\n");
+          return (
+            <div
+              key={p.id}
+              className="dim-map-label"
+              data-selected={p.id === selectedId ? "true" : undefined}
+              title={full}
+              style={{ left: `${shape.cx * 100}%`, top: `${(shape.cy - shape.ry) * 100}%` }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onSelect(p.id === selectedId ? null : p.id);
+              }}
+            >
+              <span className="dim-map-label-num">{i + 1}</span>
+              <span className="dim-map-label-text">{label}</span>
+            </div>
+          );
+        })}
 
         {!disabled && handlePoint && selected && (
           <div
@@ -266,7 +279,7 @@ export default function DimPointsMap({
         <div className="map-caption-bar">
           <span className="map-caption-badge">
             {selected
-              ? `${selected.name || t("dim.unnamed")} · ${Math.round(selected.radiusM)} m · ${formatLonLatIn(crs, selected.lon, selected.lat, crs.format === "utm" ? 0 : 5)}`
+              ? `${selected.name || t("dim.unnamed")} · ${Math.round(selected.radiusM)} m · ${formatLonLatIn(crs, selected.lon, selected.lat, isGeographic(crs) ? 5 : 0)}`
               : t("dim.activeCount", { n: placed.length })}
           </span>
           {disabled ? (

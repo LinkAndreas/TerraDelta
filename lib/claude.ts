@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CATEGORIES, MAX_CATEGORY_MATCHES, type AnalyzeResult, type ClassifyResult, type Effort, type SupportedModels, type TokenUsage } from "./types";
 import {
+  buildDetectHints,
   buildDetectSystem,
   CLASSIFY_SYSTEM,
   buildResult,
@@ -85,7 +86,14 @@ function cachedSystem(text: string): Anthropic.Messages.TextBlockParam[] {
 export async function anthropicDetect(
   referenceDataUrl: string,
   targetDataUrl: string,
-  opts: { model: string; apiKey?: string; language?: string; effort?: Effort; includeVegetation?: boolean },
+  opts: {
+    model: string;
+    apiKey?: string;
+    language?: string;
+    effort?: Effort;
+    includeVegetation?: boolean;
+    hints?: string[];
+  },
 ): Promise<AnalyzeResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -119,6 +127,7 @@ export async function anthropicDetect(
             type: "text" as const,
             text:
               "Identify every physical difference between the two dates and return them in the required JSON schema." +
+              buildDetectHints(opts.hints ?? []) +
               languageInstruction(opts.language),
           },
         ],

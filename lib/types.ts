@@ -618,6 +618,19 @@ export function dimPointToArea(p: DimPoint): SearchArea {
   };
 }
 
+// What a DIM point tells the detector about its location: the imported
+// description plus the remark column, which in a real list carries the case
+// history ("Aufstellungsbeschluss war am ...", "Keine weitere Veränderung ...").
+// Capped and flattened to one line — a remark can run to a dozen dated entries,
+// and the detector needs the gist, not the file.
+export const DIM_HINT_MAX_CHARS = 320;
+
+export function dimPointHint(p: DimPoint): string {
+  const text = [p.name?.trim(), p.note?.trim()].filter(Boolean).join(" — ").replace(/\s+/g, " ").trim();
+  if (text.length <= DIM_HINT_MAX_CHARS) return text;
+  return `${text.slice(0, DIM_HINT_MAX_CHARS - 1).trimEnd()}…`;
+}
+
 export function isDimPointPlaced(p: DimPoint): boolean {
   return Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.radiusM > 0;
 }
