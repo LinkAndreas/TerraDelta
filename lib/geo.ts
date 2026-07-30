@@ -11,7 +11,7 @@
 // intermediate resize/align scale factors to track.
 
 import proj4 from "proj4";
-import type { Change, GeoRef, SearchArea, SearchShape } from "./types";
+import { dimPointToArea, isDimPointPlaced, type Change, type DimPoint, type GeoRef, type SearchArea, type SearchShape } from "./types";
 
 const METERS_PER_DEG_LAT = 111_320;
 
@@ -260,6 +260,52 @@ export function resizeSearchArea(
     widthM = heightM = Math.max(widthM, heightM);
   }
   return { radiusM: widthM / 2, widthM, heightM };
+}
+
+// ── DIM points ─────────────────────────────────────────────────────────────
+// The point-list search mode (§ types.ts DimPoint). Each point is a circular
+// area, so every helper here just fans the single-area math out over the list
+// with "inside ANY point" / "union of bounding rects" semantics.
+
+export type NormalizedRect = { x0: number; y0: number; x1: number; y1: number };
+
+export function dimPointToNormalizedRect(geo: GeoRef, point: DimPoint): NormalizedRect {
+  return searchAreaToNormalizedRect(geo, dimPointToArea(point));
+}
+
+export function dimPointToOverlayShape(geo: GeoRef, point: DimPoint): OverlayShape {
+  return searchAreaToOverlayShape(geo, dimPointToArea(point));
+}
+
+// Only points that actually have a position and a positive radius take part in
+// a search — a half-filled row being edited must not silently restrict (or,
+// worse, widen) the analysis.
+export function placedDimPoints(points: readonly DimPoint[]): DimPoint[] {
+  return points.filter(isDimPointPlaced);
+}
+
+export function isPointInAnyDimPoint(points: readonly DimPoint[], lon: number, lat: number): boolean {
+  return placedDimPoints(points).some((p) => isPointInSearchArea(dimPointToArea(p), lon, lat));
+}
+
+export function changeInAnyDimPoint(geo: GeoRef, points: readonly DimPoint[], change: Change): boolean {
+  const [lon, lat] = changeCenterLonLat(geo, change);
+  return isPointInAnyDimPoint(points, lon, lat);
+}
+
+// Which DIM point a change belongs to (the first one containing its center),
+// so the report and exports can name the point a change was found at.
+export function dimPointForChange(geo: GeoRef, points: readonly DimPoint[], change: Change): DimPoint | null {
+  const [lon, lat] = changeCenterLonLat(geo, change);
+  return placedDimPoints(points).find((p) => isPointInSearchArea(dimPointToArea(p), lon, lat)) ?? null;
+}
+
+// Per-point bounding rects, for tile pruning: a tile is analyzed when it
+// overlaps ANY of them. Kept as a list rather than one merged rect — points
+// can be kilometres apart, and a single hull around them would defeat the
+// pruning entirely.
+export function dimPointRects(geo: GeoRef, points: readonly DimPoint[]): NormalizedRect[] {
+  return placedDimPoints(points).map((p) => dimPointToNormalizedRect(geo, p));
 }
 
 // Does a tile (normalized rect on the aligned frame) overlap the search

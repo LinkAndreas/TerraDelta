@@ -10,6 +10,7 @@ import {
   searchAreaToOverlayShape,
   type NormalizedPoint,
 } from "@/lib/geo";
+import { formatLonLatIn, type CoordSystem } from "@/lib/crs";
 import type { GeoRef, SearchArea } from "@/lib/types";
 
 interface Props {
@@ -19,6 +20,10 @@ interface Props {
   targetGeo: GeoRef;
   area: SearchArea;
   pointSet: boolean;
+  // Coordinate system the caption reads the center out in — matches the one
+  // selected for entry, so the number under the map and the number in the
+  // field are the same number.
+  crs: CoordSystem;
   onChange: (patch: Partial<SearchArea>) => void;
   onClear: () => void;
   disabled?: boolean;
@@ -41,6 +46,7 @@ export default function SearchAreaMap({
   targetGeo,
   area,
   pointSet,
+  crs,
   onChange,
   onClear,
   disabled = false,
@@ -95,7 +101,7 @@ export default function SearchAreaMap({
 
   const sizeCaption =
     area.shape === "circle" ? `⌀ ${Math.round(area.radiusM * 2)} m` : `${Math.round(area.widthM)} × ${Math.round(area.heightM)} m`;
-  const coordCaption = pointSet ? `${area.lat.toFixed(4)}, ${area.lon.toFixed(4)}` : "";
+  const coordCaption = pointSet ? formatLonLatIn(crs, area.lon, area.lat, crs.format === "utm" ? 0 : 4) : "";
 
   const handlePoints: [number, number][] | null = !overlay
     ? null

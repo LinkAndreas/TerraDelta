@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { CHANGE_COLORS, type Change, type GeoRef, type SearchArea } from "@/lib/types";
-import { searchAreaToOverlayShape, type OverlayShape } from "@/lib/geo";
+import { CHANGE_COLORS, type Change, type DimPoint, type GeoRef, type SearchArea } from "@/lib/types";
+import { dimPointToOverlayShape, searchAreaToOverlayShape, type OverlayShape } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
 
 type Mode = "old" | "new" | "slider" | "side";
@@ -18,6 +18,10 @@ interface Props {
   onSelect: (id: string | null) => void;
   refGeo?: GeoRef | null;
   searchArea?: SearchArea | null;
+  // The other restriction mode: the analysis was limited to a radius around
+  // each of these points, so each gets the same outline treatment as a drawn
+  // search area. Empty unless DIM-point mode was active for the run.
+  dimPoints?: DimPoint[];
 }
 
 export default function CompareView({
@@ -31,6 +35,7 @@ export default function CompareView({
   onSelect,
   refGeo,
   searchArea,
+  dimPoints,
 }: Props) {
   const { t } = useI18n();
   const [mode, setMode] = useState<Mode>("slider");
@@ -66,22 +71,28 @@ export default function CompareView({
     .map((c, i) => ({ c, n: i + 1 }))
     .filter(({ c }) => visibleIds.has(c.id));
 
-  const areaShape: OverlayShape | null = useMemo(() => {
-    if (!refGeo || !searchArea) return null;
+  // Outlines of whatever restricted the run: the single drawn area, or one
+  // circle per DIM point. Both modes render identically — the outline says
+  // "the analysis only looked here", and that reads the same whether "here"
+  // was one shape or twelve.
+  const restrictionShapes: OverlayShape[] = useMemo(() => {
+    if (!refGeo) return [];
     try {
-      return searchAreaToOverlayShape(refGeo, searchArea);
+      if (searchArea) return [searchAreaToOverlayShape(refGeo, searchArea)];
+      return (dimPoints ?? []).map((p) => dimPointToOverlayShape(refGeo, p));
     } catch {
-      return null;
+      return [];
     }
-  }, [refGeo, searchArea]);
+  }, [refGeo, searchArea, dimPoints]);
 
-  const searchAreaOutline = areaShape ? (
-    areaShape.kind === "ellipse" ? (
+  const restrictionOutline = restrictionShapes.map((shape, i) =>
+    shape.kind === "ellipse" ? (
       <ellipse
-        cx={areaShape.cx * 100}
-        cy={areaShape.cy * 100}
-        rx={areaShape.rx * 100}
-        ry={areaShape.ry * 100}
+        key={i}
+        cx={shape.cx * 100}
+        cy={shape.cy * 100}
+        rx={shape.rx * 100}
+        ry={shape.ry * 100}
         fill="none"
         stroke="#38bdf8"
         strokeWidth={2}
@@ -90,24 +101,25 @@ export default function CompareView({
       />
     ) : (
       <rect
-        x={areaShape.x * 100}
-        y={areaShape.y * 100}
-        width={areaShape.w * 100}
-        height={areaShape.h * 100}
+        key={i}
+        x={shape.x * 100}
+        y={shape.y * 100}
+        width={shape.w * 100}
+        height={shape.h * 100}
         fill="none"
         stroke="#38bdf8"
         strokeWidth={2}
         strokeDasharray="3 2"
         vectorEffect="non-scaling-stroke"
       />
-    )
-  ) : null;
+    ),
+  );
 
   const overlay = (maskId: string) =>
-    showBoxes || areaShape ? (
+    showBoxes || restrictionShapes.length > 0 ? (
       <>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="overlay-svg">
-          {searchAreaOutline}
+          {restrictionOutline}
           {showBoxes && spotlight && (
             <>
               <defs>

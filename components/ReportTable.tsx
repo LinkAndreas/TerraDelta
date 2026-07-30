@@ -8,10 +8,13 @@ import {
   type Category,
   type Change,
   type ChangeType,
+  type DimPoint,
   type GeoRef,
   type SearchArea,
 } from "@/lib/types";
 import { useI18n, type StringKey } from "@/lib/i18n";
+import CoordSystemPicker from "@/components/CoordSystemPicker";
+import { crsEpsg, type CoordSystem } from "@/lib/crs";
 
 interface Props {
   changes: Change[];
@@ -30,6 +33,13 @@ interface Props {
   // Present only in restricted-search-area mode (§5.1) — enables the
   // "digitales Merkblatt" export (§6).
   merkblattArea?: SearchArea | null;
+  // Present in the other restriction mode: the run was limited to a radius
+  // around each of these points. Also enables the Merkblatt, and adds the
+  // point name to every coordinate-bearing export.
+  dimPoints?: DimPoint[];
+  // Coordinate system every exported coordinate is written in (§2/§3).
+  exportCrs: CoordSystem;
+  setExportCrs: (cs: CoordSystem) => void;
 }
 
 const TYPES: ChangeType[] = ["added", "removed", "modified"];
@@ -49,6 +59,9 @@ export default function ReportTable({
   targetUrl,
   refGeo,
   merkblattArea,
+  dimPoints,
+  exportCrs,
+  setExportCrs,
 }: Props) {
   const { t, lang } = useI18n();
   const [exporting, setExporting] = useState(false);
@@ -71,13 +84,21 @@ export default function ReportTable({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [menuOpen]);
 
+  // Everything the export layer needs beyond the changes themselves: the
+  // georeferencing, the coordinate system to write coordinates in, and the
+  // DIM points to attribute changes to. Assembled once so every format gets
+  // exactly the same context.
+  const exportCtx = { geo: refGeo, crs: exportCrs, dimPoints };
+  // The Merkblatt documents a restricted run — either mode qualifies.
+  const canMerkblatt = !!refGeo && (!!merkblattArea || (dimPoints?.length ?? 0) > 0);
+
   async function handleExportPdf() {
     if (!refUrl || !targetUrl || exporting) return;
     setMenuOpen(false);
     setExporting(true);
     try {
       const { exportPdf } = await import("@/lib/pdf");
-      await exportPdf({ refUrl, targetUrl, changes: visibleChanges, lang, geo: refGeo });
+      await exportPdf({ refUrl, targetUrl, changes: visibleChanges, lang, ...exportCtx });
     } finally {
       setExporting(false);
     }
@@ -86,21 +107,21 @@ export default function ReportTable({
   async function handleExportCsv() {
     setMenuOpen(false);
     const { exportCsv } = await import("@/lib/exportData");
-    exportCsv(visibleChanges, refGeo);
+    exportCsv(visibleChanges, exportCtx);
   }
 
   async function handleExportGeoJson() {
     if (!refGeo) return;
     setMenuOpen(false);
     const { exportGeoJson } = await import("@/lib/exportData");
-    exportGeoJson(visibleChanges, refGeo);
+    exportGeoJson(visibleChanges, refGeo, exportCtx);
   }
 
   async function handleExportKml() {
     if (!refGeo) return;
     setMenuOpen(false);
     const { exportKml } = await import("@/lib/exportData");
-    exportKml(visibleChanges, refGeo, lang);
+    exportKml(visibleChanges, refGeo, lang, exportCtx);
   }
 
   async function handleExportAll() {
@@ -109,19 +130,28 @@ export default function ReportTable({
     setExporting(true);
     try {
       const { exportAll } = await import("@/lib/exportData");
-      await exportAll({ changes: visibleChanges, refUrl, targetUrl, lang, geo: refGeo });
+      await exportAll({ changes: visibleChanges, refUrl, targetUrl, lang, ...exportCtx });
     } finally {
       setExporting(false);
     }
   }
 
   async function handleExportMerkblatt() {
-    if (!refUrl || !targetUrl || !refGeo || !merkblattArea || exporting) return;
+    if (!refUrl || !targetUrl || !refGeo || !canMerkblatt || exporting) return;
     setMenuOpen(false);
     setExporting(true);
     try {
       const { exportMerkblatt } = await import("@/lib/pdf");
-      await exportMerkblatt({ refUrl, targetUrl, changes: visibleChanges, lang, searchArea: merkblattArea, geo: refGeo });
+      await exportMerkblatt({
+        refUrl,
+        targetUrl,
+        changes: visibleChanges,
+        lang,
+        searchArea: merkblattArea,
+        geo: refGeo,
+        crs: exportCrs,
+        dimPoints,
+      });
     } finally {
       setExporting(false);
     }
@@ -202,6 +232,24 @@ export default function ReportTable({
           </button>
           {menuOpen && (
             <div className="dropdown-menu">
+              {/* Coordinate system for every export below. Sits inside the
+                  menu because it only matters at export time, and putting it
+                  here keeps the choice next to the action it applies to. */}
+              {refGeo && (
+                <>
+                  <div style={{ padding: "10px 12px 12px" }} onClick={(e) => e.stopPropagation()}>
+                    <CoordSystemPicker
+                      value={exportCrs}
+                      onChange={setExportCrs}
+                      label={t("report.exportCrs")}
+                    />
+                    <div className="muted" style={{ fontSize: 11, marginTop: 8, maxWidth: 280, lineHeight: 1.5 }}>
+                      {t("report.exportCrsNote", { crs: crsEpsg(exportCrs) })}
+                    </div>
+                  </div>
+                  <div className="dropdown-divider" role="separator" />
+                </>
+              )}
               <button className="dropdown-item" onClick={handleExportPdf} disabled={!refUrl || !targetUrl} title={t("report.tipExportPdf")}>
                 {t("report.exportPdf")}
               </button>
@@ -214,7 +262,7 @@ export default function ReportTable({
               <button className="dropdown-item" onClick={handleExportKml} disabled={!refGeo} title={refGeo ? t("report.tipExportKml") : t("report.needsGeoTiffForExport")}>
                 {t("report.exportKml")}
               </button>
-              {merkblattArea && refGeo && (
+              {canMerkblatt && (
                 <button className="dropdown-item" onClick={handleExportMerkblatt} title={t("report.tipExportMerkblatt")}>
                   {t("report.exportMerkblatt")}
                 </button>

@@ -1,6 +1,7 @@
-import type { Category, Change, ChangeType, Confidence, GeoRef, SearchArea } from "./types";
+import type { Category, Change, ChangeType, Confidence, DimPoint, GeoRef, SearchArea } from "./types";
 import { CATEGORY_REF, CHANGE_COLORS, scoreLabel } from "./types";
-import { changeAreaM2, changeCenterLonLat } from "./geo";
+import { changeAreaM2, changeCenterLonLat, dimPointForChange } from "./geo";
+import { crsEpsg, coordDecimals, formatLonLatIn, DEFAULT_EXPORT_CRS, type CoordSystem } from "./crs";
 import { translate, type Lang, type StringKey } from "./i18n";
 
 // ── DIN A4 constants (all in mm) ──────────────────────────────────────────
@@ -226,14 +227,20 @@ export interface PdfBuildOptions {
   lang: Lang;
   geo?: GeoRef | null;
   searchArea?: SearchArea | null;
+  // Coordinate system every coordinate in the report is written in (§ lib/crs.ts).
+  crs?: CoordSystem;
+  // Present when the run was restricted to DIM points — the info box lists
+  // them and the change table names the point each change was found at.
+  dimPoints?: DimPoint[];
 }
 
 async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
   const { default: jsPDF } = await import("jspdf");
-  const { refUrl, targetUrl, changes, lang, geo, searchArea } = opts;
+  const { refUrl, targetUrl, changes, lang, geo, searchArea, crs = DEFAULT_EXPORT_CRS, dimPoints } = opts;
   const t = (key: StringKey, vars?: Record<string, string | number>) => translate(lang, key, vars);
   const hasCoord = !!geo;
-  const title = searchArea ? t("pdf.merkblattTitle") : t("pdf.title");
+  const hasDim = !!geo && !!dimPoints && dimPoints.length > 0;
+  const title = searchArea || hasDim ? t("pdf.merkblattTitle") : t("pdf.title");
 
   // Render assets in parallel
   const PX = 1000;
@@ -278,11 +285,42 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
 
     setFont(doc, "normal", 9, DARK);
     doc.text(
-      `${t("search.lat")}: ${searchArea.lat.toFixed(6)}   ${t("search.lon")}: ${searchArea.lon.toFixed(6)}`,
+      `${formatLonLatIn(crs, searchArea.lon, searchArea.lat, crs.format === "wgs84" ? 6 : coordDecimals(crs))}  (${crsEpsg(crs)})`,
       M + 3,
       infoY + 12,
     );
     doc.text(`${shapeLabel} · ${sizeLabel}`, M + 3, infoY + 18);
+    imgAreaY = infoY + infoH + 6;
+  } else if (hasDim) {
+    // DIM-point mode gets the same banner, listing the points the run was
+    // restricted to. Long lists are truncated to keep page 1 to its layout —
+    // the full list is implicit in the change table's DIM column anyway.
+    const points = dimPoints!;
+    const MAX_LISTED = 6;
+    const listed = points.slice(0, MAX_LISTED);
+    const infoY = HEADER_H + 10;
+    const infoH = 13 + listed.length * 4.6 + (points.length > MAX_LISTED ? 4.6 : 0);
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(M, infoY, CW, infoH, 2, 2, "F");
+    doc.setFillColor(...BRAND);
+    doc.roundedRect(M, infoY, CW, 7, 2, 2, "F");
+    doc.rect(M, infoY + 3, CW, 4, "F");
+    setFont(doc, "bold", 8.5, WHITE);
+    doc.text(t("pdf.dimPoints", { n: points.length, crs: crsEpsg(crs) }), M + CW / 2, infoY + 4.8, {
+      align: "center",
+    });
+
+    setFont(doc, "normal", 8, DARK);
+    listed.forEach((p, i) => {
+      const coord = formatLonLatIn(crs, p.lon, p.lat, crs.format === "wgs84" ? 6 : 0);
+      const name = doc.splitTextToSize(p.name || `#${i + 1}`, CW - 70)[0] ?? "";
+      doc.text(`${i + 1}. ${name}`, M + 3, infoY + 11.5 + i * 4.6);
+      doc.text(`${coord} · r ${Math.round(p.radiusM)} m`, PW - M - 3, infoY + 11.5 + i * 4.6, { align: "right" });
+    });
+    if (points.length > MAX_LISTED) {
+      setFont(doc, "normal", 7.5, MID);
+      doc.text(t("pdf.dimPointsMore", { n: points.length - MAX_LISTED }), M + 3, infoY + 11.5 + listed.length * 4.6);
+    }
     imgAreaY = infoY + infoH + 6;
   }
 
@@ -376,6 +414,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     // alternatives belong in the report rather than being dropped.
     altLines: string[];
     coord: string;
+    dimName: string;
     area: string;
     height: number;
   }
@@ -401,10 +440,12 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
 
     let coord = "";
     let area = "";
+    let dimName = "";
     if (geo) {
       const [lon, lat] = changeCenterLonLat(geo, c);
-      coord = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      coord = formatLonLatIn(crs, lon, lat, crs.format === "wgs84" ? 5 : coordDecimals(crs));
       area = formatArea(changeAreaM2(geo, c), lang);
+      if (hasDim) dimName = dimPointForChange(geo, dimPoints!, c)?.name ?? "";
     }
 
     const descBlockH = descLines.length * LINE_H + (noteLines.length ? noteLines.length * NOTE_LINE_H + 1 : 0);
@@ -412,9 +453,9 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
       catLines.length * LINE_H +
       (ref ? REF_H + 0.5 : 0) +
       (altLines.length ? altLines.length * NOTE_LINE_H + 0.6 : 0);
-    const coordBlockH = hasCoord ? 2 * COORD_LINE_H : 0;
+    const coordBlockH = hasCoord ? (dimName ? 3 : 2) * COORD_LINE_H : 0;
     const contentH = Math.max(descBlockH, catBlockH, coordBlockH, 5);
-    return { descLines, noteLines, catLines, ref, altLines, coord, area, height: contentH + ROW_PAD * 2 };
+    return { descLines, noteLines, catLines, ref, altLines, coord, area, dimName, height: contentH + ROW_PAD * 2 };
   });
 
   // Count table pages
@@ -450,7 +491,7 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
     doc.text(t("th.num"), COL_X.num + colW.num / 2, mid, { align: "center" });
     doc.text(t("th.type"), COL_X.type + 2, mid);
     doc.text(t("th.category"), COL_X.cat + 2, mid);
-    if (hasCoord) doc.text(t("th.coordinates"), COL_X.coord + 2, mid);
+    if (hasCoord) doc.text(`${t("th.coordinates")} (${crsEpsg(crs)})`, COL_X.coord + 2, mid);
     doc.text(t("th.description"), COL_X.desc + 2, mid);
     doc.text(t("th.conf"), COL_X.conf + 2, mid);
   }
@@ -559,12 +600,20 @@ async function buildPdf(opts: PdfBuildOptions): Promise<Doc> {
       rm.altLines.forEach((line, li) => doc.text(line, COL_X.cat + 2, catY + 0.6 + li * NOTE_LINE_H));
     }
 
-    // Coordinates (center lat/lon + real-world area)
+    // Coordinates (center, in the selected coordinate system) + real-world
+    // area, and — in DIM-point mode — the point the change was found at.
     if (hasCoord) {
       setFont(doc, "normal", 7, DARK);
       doc.text(rm.coord, COL_X.coord + 2, topY);
       setFont(doc, "normal", FONT_SIZE_NOTE, MID);
       doc.text(rm.area, COL_X.coord + 2, topY + COORD_LINE_H);
+      if (rm.dimName) {
+        doc.text(
+          doc.splitTextToSize(rm.dimName, colW.coord - 3)[0] ?? "",
+          COL_X.coord + 2,
+          topY + 2 * COORD_LINE_H,
+        );
+      }
     }
 
     // Description (wrapped) + verifier note beneath
@@ -601,6 +650,8 @@ export async function exportPdf(opts: {
   changes: Change[];
   lang: Lang;
   geo?: GeoRef | null;
+  crs?: CoordSystem;
+  dimPoints?: DimPoint[];
 }): Promise<void> {
   const doc = await buildPdf(opts);
   doc.save(`terradelta-report-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -613,8 +664,12 @@ export async function exportMerkblatt(opts: {
   targetUrl: string;
   changes: Change[];
   lang: Lang;
-  searchArea: SearchArea;
+  // Exactly one of these carries the restriction the Merkblatt documents:
+  // the drawn area, or the DIM point list.
+  searchArea?: SearchArea | null;
   geo: GeoRef;
+  crs?: CoordSystem;
+  dimPoints?: DimPoint[];
 }): Promise<void> {
   const doc = await buildPdf(opts);
   doc.save(`terradelta-merkblatt-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -628,6 +683,8 @@ export async function buildReportBlob(opts: {
   changes: Change[];
   lang: Lang;
   geo?: GeoRef | null;
+  crs?: CoordSystem;
+  dimPoints?: DimPoint[];
 }): Promise<Blob> {
   const doc = await buildPdf(opts);
   return doc.output("blob");

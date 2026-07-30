@@ -1,16 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n, type StringKey } from "@/lib/i18n";
 import SearchAreaMap from "@/components/SearchAreaMap";
-import { DEFAULT_RADIUS_M, type GeoRef, type SearchArea, type SearchShape } from "@/lib/types";
+import DimPointsMap from "@/components/DimPointsMap";
+import DimPointsPanel from "@/components/DimPointsPanel";
+import CoordSystemPicker from "@/components/CoordSystemPicker";
+import {
+  axisLabels,
+  clampZone,
+  coordDecimals,
+  fromLonLat,
+  parseEasting,
+  toLonLat,
+  type CoordSystem,
+} from "@/lib/crs";
+import {
+  DEFAULT_RADIUS_M,
+  type DimPoint,
+  type GeoRef,
+  type SearchArea,
+  type SearchMode,
+  type SearchShape,
+} from "@/lib/types";
 
 interface Props {
   geoAvailable: boolean;
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
+  // Which of the two independent restriction modes is active: one drawn area,
+  // or a list of DIM points each with its own radius.
+  mode: SearchMode;
+  setMode: (mode: SearchMode) => void;
   searchArea: SearchArea | null;
   setSearchArea: (area: SearchArea | null) => void;
+  dimPoints: DimPoint[];
+  setDimPoints: (points: DimPoint[]) => void;
+  // Coordinate system used for ENTERING/READING coordinates in this section.
+  // Positions are always stored as WGS84 lon/lat regardless (see lib/crs.ts).
+  entryCrs: CoordSystem;
+  setEntryCrs: (cs: CoordSystem) => void;
   refUrl: string | null;
   targetUrl: string | null;
   refGeo: GeoRef | null;
@@ -20,13 +49,20 @@ interface Props {
 
 const SHAPES: SearchShape[] = ["circle", "rectangle", "square"];
 const RADIUS_PRESETS = [100, 200, 500, 1000, 2000, 5000];
+const MODES: SearchMode[] = ["area", "points"];
 
 export default function SearchAreaSection({
   geoAvailable,
   enabled,
   setEnabled,
+  mode,
+  setMode,
   searchArea,
   setSearchArea,
+  dimPoints,
+  setDimPoints,
+  entryCrs,
+  setEntryCrs,
   refUrl,
   targetUrl,
   refGeo,
@@ -35,6 +71,7 @@ export default function SearchAreaSection({
 }: Props) {
   const { t } = useI18n();
   const active = enabled && geoAvailable;
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
 
   // lat/lon default to NaN ("no point picked yet") rather than 0 — 0/0 is a
   // real place (off the coast of West Africa), so silently seeding it would
@@ -50,6 +87,29 @@ export default function SearchAreaSection({
     };
   const update = (patch: Partial<SearchArea>) => setSearchArea({ ...area, ...patch });
   const pointSet = Number.isFinite(area.lat) && Number.isFinite(area.lon);
+
+  const updatePoint = (id: string, patch: Partial<DimPoint>) =>
+    setDimPoints(dimPoints.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+
+  // Clicking empty image space fills in the selected point when it has no
+  // position yet; otherwise it adds a new point there. That makes "add row,
+  // then click where it is" and "just keep clicking to drop points" both work.
+  const placeAt = (lon: number, lat: number) => {
+    const selected = dimPoints.find((p) => p.id === selectedPointId);
+    if (selected && !(Number.isFinite(selected.lat) && Number.isFinite(selected.lon))) {
+      updatePoint(selected.id, { lon, lat });
+      return;
+    }
+    const point: DimPoint = {
+      id: `dim-${Date.now()}-${dimPoints.length}`,
+      name: "",
+      lat,
+      lon,
+      radiusM: DEFAULT_RADIUS_M,
+    };
+    setDimPoints([...dimPoints, point]);
+    setSelectedPointId(point.id);
+  };
 
   return (
     <div>
@@ -105,7 +165,58 @@ export default function SearchAreaSection({
         </div>
       )}
 
-      {active && refUrl && targetUrl && refGeo && targetGeo && (
+      {active && (
+        <div className="row" style={{ gap: 10, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <div className="segmented" style={{ width: "fit-content" }}>
+            {MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={mode === m}
+                disabled={disabled}
+                title={t(m === "area" ? "search.mode.areaTip" : "search.mode.pointsTip")}
+                onClick={() => setMode(m)}
+              >
+                {t(m === "area" ? "search.mode.area" : "search.mode.points")}
+              </button>
+            ))}
+          </div>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {t(mode === "area" ? "search.mode.areaHint" : "search.mode.pointsHint")}
+          </span>
+        </div>
+      )}
+
+      {active && mode === "points" && (
+        <div style={{ marginTop: 18, display: "grid", gap: 18 }}>
+          {refUrl && targetUrl && refGeo && targetGeo && (
+            <DimPointsMap
+              refUrl={refUrl}
+              targetUrl={targetUrl}
+              refGeo={refGeo}
+              targetGeo={targetGeo}
+              points={dimPoints}
+              selectedId={selectedPointId}
+              crs={entryCrs}
+              onSelect={setSelectedPointId}
+              onChangePoint={updatePoint}
+              onPlaceAt={placeAt}
+              disabled={disabled}
+            />
+          )}
+          <DimPointsPanel
+            points={dimPoints}
+            setPoints={setDimPoints}
+            entryCrs={entryCrs}
+            setEntryCrs={setEntryCrs}
+            selectedId={selectedPointId}
+            setSelectedId={setSelectedPointId}
+            disabled={disabled}
+          />
+        </div>
+      )}
+
+      {active && mode === "area" && refUrl && targetUrl && refGeo && targetGeo && (
         <div style={{ marginTop: 20 }}>
           <SearchAreaMap
             refUrl={refUrl}
@@ -114,6 +225,7 @@ export default function SearchAreaSection({
             targetGeo={targetGeo}
             area={area}
             pointSet={pointSet}
+            crs={entryCrs}
             onChange={update}
             onClear={() => setSearchArea(null)}
             disabled={disabled}
@@ -122,30 +234,8 @@ export default function SearchAreaSection({
           <div className="row" style={{ gap: 28, marginTop: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 260px", display: "grid", gap: 14 }}>
               <GroupLabel icon="📍">{t("search.groupLocation")}</GroupLabel>
-              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                <NumberField
-                  label={t("search.lat")}
-                  value={area.lat}
-                  min={-90}
-                  max={90}
-                  decimals={4}
-                  placeholder={t("search.latPlaceholder")}
-                  onCommit={(n) => update({ lat: n })}
-                  width={140}
-                  disabled={disabled}
-                />
-                <NumberField
-                  label={t("search.lon")}
-                  value={area.lon}
-                  min={-180}
-                  max={180}
-                  decimals={4}
-                  placeholder={t("search.lonPlaceholder")}
-                  onCommit={(n) => update({ lon: n })}
-                  width={140}
-                  disabled={disabled}
-                />
-              </div>
+              <CoordSystemPicker value={entryCrs} onChange={setEntryCrs} disabled={disabled} />
+              <AreaCoordFields area={area} crs={entryCrs} onChange={update} disabled={disabled} />
               {!pointSet && (
                 <div className="muted" style={{ fontSize: 12 }}>
                   {t("search.needsPoint")}
@@ -247,6 +337,76 @@ export default function SearchAreaSection({
   );
 }
 
+// The search area's center, written in whichever coordinate system the user
+// picked. Editing one axis keeps the other as it currently reads in that
+// system and converts the pair back to lon/lat, so a UTM northing edit never
+// drags the easting along through a rounding round-trip.
+function AreaCoordFields({
+  area,
+  crs,
+  onChange,
+  disabled,
+}: {
+  area: SearchArea;
+  crs: CoordSystem;
+  onChange: (patch: Partial<SearchArea>) => void;
+  disabled: boolean;
+}) {
+  const { t } = useI18n();
+  const labels = axisLabels(crs);
+  const decimals = coordDecimals(crs);
+
+  const [x, y] = useMemo(
+    () =>
+      Number.isFinite(area.lat) && Number.isFinite(area.lon)
+        ? fromLonLat(crs, area.lon, area.lat)
+        : [NaN, NaN],
+    [crs, area.lat, area.lon],
+  );
+
+  const commitAxis = (axis: "x" | "y", raw: number) => {
+    let nx = axis === "x" ? raw : x;
+    let ny = axis === "y" ? raw : y;
+    let activeCrs = crs;
+
+    if (crs.format === "utm" && axis === "x") {
+      const { easting, zone } = parseEasting(raw);
+      nx = easting;
+      if (zone !== null) activeCrs = { ...crs, zone: clampZone(zone) };
+    }
+
+    if (!Number.isFinite(nx) || !Number.isFinite(ny)) {
+      onChange({ lat: NaN, lon: NaN });
+      return;
+    }
+    const [lon, lat] = toLonLat(activeCrs, nx, ny);
+    onChange({ lon, lat });
+  };
+
+  return (
+    <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+      <NumberField
+        label={crs.format === "wgs84" ? t("search.lon") : labels.x}
+        value={x}
+        decimals={decimals}
+        placeholder={crs.format === "wgs84" ? t("search.lonPlaceholder") : t("search.eastingPlaceholder")}
+        onCommit={(n) => commitAxis("x", n)}
+        width={150}
+        disabled={disabled}
+      />
+      <NumberField
+        label={crs.format === "wgs84" ? t("search.lat") : labels.y}
+        value={y}
+        decimals={decimals}
+        placeholder={crs.format === "wgs84" ? t("search.latPlaceholder") : t("search.northingPlaceholder")}
+        onCommit={(n) => commitAxis("y", n)}
+        width={150}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
 function GroupLabel({ icon, children }: { icon: string; children: React.ReactNode }) {
   return (
     <div className="row" style={{ gap: 7, fontSize: 13.5, fontWeight: 600 }}>
@@ -290,7 +450,8 @@ function NumberField({
   min?: number;
   max?: number;
   // Round the committed (and re-displayed) value to this many decimal
-  // places — e.g. 4 for lat/lon (~11 m precision), left unset for meters.
+  // places — e.g. 6 for lat/lon, 2 for projected metres, left unset for
+  // whole-metre sizes.
   decimals?: number;
   placeholder?: string;
   width?: number;
@@ -298,7 +459,7 @@ function NumberField({
 }) {
   // Values driven by dragging on the map (radius/width/height, in meters)
   // arrive with float noise — round for display the same way a manual
-  // commit would (0 decimals unless the field asks for more, as lat/lon do).
+  // commit would (0 decimals unless the field asks for more).
   const displayValue = (n: number) => {
     const factor = 10 ** (decimals ?? 0);
     return Math.round(n * factor) / factor;
@@ -315,9 +476,9 @@ function NumberField({
       onCommit(NaN);
       return;
     }
-    let n = Number(raw);
+    let n = Number(raw.replace(",", "."));
     if (!Number.isFinite(n)) {
-      setRaw(Number.isFinite(value) ? String(value) : "");
+      setRaw(Number.isFinite(value) ? String(displayValue(value)) : "");
       return;
     }
     if (min !== undefined) n = Math.max(min, n);
