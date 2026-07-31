@@ -28,6 +28,10 @@ exists.
 
 _Nothing yet._
 
+## [1.6.1] — 2026-07-31
+
+- Name Column Width: Fix name column width to only fill remaining horizontal space
+
 ## [1.6.0] — 2026-07-31
 
 - DIM points: search coverage — each point gets its own tightly-cropped tile at full source resolution instead of sharing a generic grid tile, so a small search radius is never diluted or clipped at a tile boundary.
