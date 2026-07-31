@@ -12,7 +12,7 @@ import {
   type GeoRef,
   type SearchArea,
 } from "@/lib/types";
-import { useI18n, type StringKey } from "@/lib/i18n";
+import { categoryLabel, useI18n, type StringKey } from "@/lib/i18n";
 import CoordSystemPicker from "@/components/CoordSystemPicker";
 import { crsEpsg, type CoordSystem } from "@/lib/crs";
 
@@ -190,11 +190,7 @@ export default function ReportTable({
     }
   }
 
-  const catLabel = (cat: string) => {
-    const key = `cat.${cat}` as StringKey;
-    const label = t(key);
-    return label === key ? cat : label;
-  };
+  const catLabel = (cat: string) => categoryLabel(t, cat);
 
   // Catalog classification cell: the best-fitting category with its fit
   // percentage, plus the runner-up alternatives (up to MAX_CATEGORY_MATCHES in

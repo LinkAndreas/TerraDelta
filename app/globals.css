@@ -1219,6 +1219,69 @@ select.lang:hover {
   animation: pulse-stroke 1.1s ease-in-out infinite;
 }
 
+/* Same pulse, but for plain HTML elements (e.g. a badge <span>) — stroke-
+   opacity above only affects SVG shapes, so a number badge marking an
+   actively-analyzed region needs an opacity-based equivalent instead. */
+.pulse-badge {
+  animation: pulse-opacity 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Live analysis preview (AnalysisPreview): entrance/exit animation is pure
+   CSS, triggered by mount — no JS timers needed. */
+.aoi-fade-in {
+  animation: aoi-fade-in 0.35s ease-out both;
+}
+
+@keyframes aoi-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.aoi-confirm-in {
+  animation: aoi-confirm-in 0.4s ease-out both;
+}
+
+@keyframes aoi-confirm-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.aoi-reject-fade {
+  animation: aoi-reject-fade 1.1s ease-out forwards;
+}
+
+@keyframes aoi-reject-fade {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes pulse-stroke {
 
   0%,

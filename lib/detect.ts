@@ -21,6 +21,9 @@ export interface DetectRequest {
   // buildDetectHints). Detection only — the classifier judges a candidate on
   // its own merits, where a prior expectation would be confirmation bias.
   hints?: string[];
+  // Whether this tile's/crop's image carries the visual AOI mask/boundary
+  // (§ lib/tiles.ts drawAoiMask) — tells the prompt what that overlay means.
+  aoiMasked?: boolean;
 }
 
 export interface ClassifyRequest extends DetectRequest {
@@ -48,6 +51,7 @@ export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> 
     effort: req.effort,
     includeVegetation: req.includeVegetation,
     hints: req.hints,
+    aoiMasked: req.aoiMasked,
   });
 }
 
@@ -65,5 +69,6 @@ export async function classifyDetectedChange(req: ClassifyRequest): Promise<Clas
     effort: req.effort,
     candidate: req.candidate,
     hints: req.hints,
+    aoiMasked: req.aoiMasked,
   });
 }

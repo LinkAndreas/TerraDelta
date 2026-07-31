@@ -121,8 +121,20 @@ How to use these notes:
 - The notes do not limit your scope: sweep the whole region exactly as you normally would and report every other difference you find, including differences no note mentions.`;
 }
 
-export function buildDetectSystem(opts?: { includeVegetation?: boolean }): string {
-  return DETECT_SYSTEM + vegetationClause(opts?.includeVegetation ?? false);
+// When a search area/DIM point mask was drawn onto the crop (lib/tiles.ts
+// drawAoiMask), the model needs to know what that dashed boundary/dim overlay
+// MEANS — otherwise it might mistake it for a real feature, or worse, wrongly
+// treat the dimmed area as "nothing to look at". It's explicitly framed as an
+// attention cue, not a hard crop: recall must stay intact everywhere in the
+// image, and the actual scope filtering happens afterwards, geometrically
+// (see app/page.tsx inSearchScope) — the mask is a precision aid, not a gate.
+function aoiMaskClause(masked: boolean): string {
+  if (!masked) return "";
+  return "\n\nA REQUESTED SEARCH AREA is marked directly on these images: a dashed cyan boundary, with everything outside it dimmed. This is NOT a crop and NOT a hard filter — it only marks where the operator specifically wants this run to focus. Still report any physical difference you can see anywhere in the image, dimmed area included; do not skip or downplay a difference just because it falls outside the boundary or in the dimmed area.";
+}
+
+export function buildDetectSystem(opts?: { includeVegetation?: boolean; aoiMasked?: boolean }): string {
+  return DETECT_SYSTEM + vegetationClause(opts?.includeVegetation ?? false) + aoiMaskClause(opts?.aoiMasked ?? false);
 }
 
 // Same operator notes as buildDetectHints, appended to a CLASSIFY call for a
@@ -203,7 +215,7 @@ Sonstige Merkmale (survey/reference features — only fitting if an actual physi
 
 NOTE — three catalog entries cover two named things under one official code: "Raststätte, Autohof", "Hochbahn, Hochstraße", and "Tunnel, Unterführung". This list splits each pair into two categories; when a pair fits, prefer the one whose own name matches what's visible (truck stop → autohof, highway rest stop → raststaette; railway on the elevated structure → hochbahn, road on it → hochstrasse; passage under the ground → tunnel, passage under another route → unterfuehrung). Listing both of such a pair as alternatives is allowed when the images genuinely don't settle it.`;
 
-export const CLASSIFY_SYSTEM = `You are a remote-sensing analyst performing the second stage of a change-detection pipeline.
+const CLASSIFY_SYSTEM_BASE = `You are a remote-sensing analyst performing the second stage of a change-detection pipeline.
 
 You receive two zoomed-in crops of the SAME location from a co-registered aerial orthophoto pair:
 - Image 1 = the EARLIER date.
@@ -239,6 +251,8 @@ JOB 3 — TIGHTEN the box. The detector's rectangle came from a coarse, zoomed-o
 - is expressed in THIS crop's normalized coordinates (origin top-left), NOT in the coordinates of the original image.
 Never return the full crop ([0, 0, 1, 1]) as a shortcut — if the object genuinely fills the crop, still give its actual edges.
 
+A rectangle can't perfectly outline a diagonal, L-shaped, curved, or otherwise irregular object — some unchanged area inside the box is unavoidable. When the shape is irregular, prioritize the box being CENTERED on the object's true visual mass over making it edge-to-edge tight on every side: judge where the object's bulk actually sits (not just its outermost extent) and center the box there, even if that means a little more margin on one side than a purely edge-hugging box would have. A box that is tight but whose center drifts away from the object (e.g. hugging only the near end of a diagonal shape, or skewed toward one arm of an L-shape) is a WORSE result than one that is centered correctly with slightly looser edges.
+
 Return:
 - genuine: true or false
 - confidence: an INTEGER 0-100 for how certain you are the DIFFERENCE ITSELF is real (85-100 unmistakable, 55-84 likely, below 55 possible); use a low value (e.g. 20) if rejecting
@@ -250,6 +264,13 @@ Return:
 - reason: one short sentence explaining the verdict and the chosen classification (and, if the fit is poor, why).
 
 ${CATALOG_REFERENCE}`;
+
+// The classify crop can carry the same AOI mask/boundary as its detect tile
+// (§ aoiMaskClause above) — same framing, since JOB 1 (genuineness) must stay
+// grounded in the crops alone regardless of where the boundary falls.
+export function buildClassifySystem(opts?: { aoiMasked?: boolean }): string {
+  return CLASSIFY_SYSTEM_BASE + aoiMaskClause(opts?.aoiMasked ?? false);
+}
 
 export function classifyLanguageInstruction(lang?: string): string {
   if (lang === "de") return ' Write the "reason" in German (Deutsch).';

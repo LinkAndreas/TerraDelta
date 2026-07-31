@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import UploadZone, { type UploadMeta } from "@/components/UploadZone";
 import CompareView from "@/components/CompareView";
+import AnalysisPreview from "@/components/AnalysisPreview";
 import ReportTable from "@/components/ReportTable";
 import SearchAreaSection from "@/components/SearchAreaSection";
 import CategorySection from "@/components/CategorySection";
@@ -12,16 +13,18 @@ import Onboarding from "@/components/Onboarding";
 import Changelog from "@/components/Changelog";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, buildDimPointTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildAoiTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile, type AoiRegion } from "@/lib/tiles";
 import {
-  rectsOverlap,
   searchAreaToNormalizedRect,
+  searchAreaToOverlayShape,
+  dimPointToOverlayShape,
   changeInSearchArea,
   changeInAnyDimPoint,
   dimPointsForChange,
   dimPointToNormalizedRect,
   placedDimPoints,
   geoRefBounds,
+  type OverlayShape,
 } from "@/lib/geo";
 import {
   DEFAULT_COORD_SYSTEM,
@@ -161,6 +164,31 @@ export default function Home() {
   const [align, setAlign] = useState<AlignResult | null>(null);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Live analysis preview (shown only while `busy`, see AnalysisPreview): the
+  // AOI shape(s), the region/tile boundaries built during "splitting", raw
+  // per-tile detections as they stream in during "detecting", the deduped set
+  // once "merging" runs, and each candidate's confirm/reject verdict as
+  // "classifying" resolves them. Reset at the top of run().
+  const [previewShapes, setPreviewShapes] = useState<OverlayShape[]>([]);
+  // `number` is a simple 1-based display index (a tile's position in the run's
+  // task list) — the internal `label` (e.g. "aoi-5-overview") is an
+  // implementation detail, not something to show a user.
+  const [previewRegions, setPreviewRegions] = useState<
+    { gx: number; gy: number; gw: number; gh: number; label: string; number: number }[]
+  >([]);
+  // Which region/tile label(s) currently have an in-flight API call, so the
+  // live preview can highlight what's actually being analyzed RIGHT NOW,
+  // distinct from the full set of regions built during "splitting".
+  const [previewActiveLabels, setPreviewActiveLabels] = useState<Set<string>>(new Set());
+  // Region/tile label(s) that have FINISHED their detect call (success or
+  // failure) — lets the preview show at a glance which regions are still
+  // pending vs. already done, not just the overall done/total count.
+  const [previewDoneLabels, setPreviewDoneLabels] = useState<Set<string>>(new Set());
+  const [previewRaw, setPreviewRaw] = useState<Change[]>([]);
+  const [previewMerged, setPreviewMerged] = useState<Change[] | null>(null);
+  const [previewClassified, setPreviewClassified] = useState<Change[]>([]);
+  const [previewRejected, setPreviewRejected] = useState<Set<string>>(new Set());
 
   // Filters (lifted here so the overlay and the table stay in sync).
   const [typeFilter, setTypeFilter] = useState<Record<ChangeType, boolean>>({
@@ -358,6 +386,14 @@ export default function Home() {
     setOptionsOpen(false);
     startRef.current = Date.now();
     setElapsed(0);
+    setPreviewShapes([]);
+    setPreviewRegions([]);
+    setPreviewActiveLabels(new Set());
+    setPreviewDoneLabels(new Set());
+    setPreviewRaw([]);
+    setPreviewMerged(null);
+    setPreviewClassified([]);
+    setPreviewRejected(new Set());
 
     try {
       const engineReady =
@@ -379,64 +415,106 @@ export default function Home() {
       setPhase("splitting");
       setPhaseProgress(null);
       setProgressMsg(t("progress.splitting"));
-      const { overview, tiles } = await buildTiles(aligned.refUrl, aligned.targetUrl);
       const geoRef = refMeta?.geo;
 
-      // §1/§5: when the search restriction is enabled, only analyze regions
-      // that matter for it — using the reference image's GeoTIFF
-      // georeferencing (see lib/geo.ts for why only the reference is needed).
-      // The two restriction modes are handled differently on purpose:
+      // §1/§5/AOI: build the area-of-interest region list for whichever
+      // restriction mode is active (or none), then hand it to ONE shape-aware
+      // tiler (buildAoiTiles, lib/tiles.ts) that replaces the old split logic:
       //
-      //  • DIM points — one dedicated, tightly-cropped tile per point (via
-      //    buildDimPointTiles), rather than filtering the generic whole-image
-      //    grid down to tiles that merely overlap a point's bounding rect.
-      //    That filter is loose for a small search radius: a circle can
-      //    straddle a tile boundary (so no single tile shows all of it), or
-      //    sit inside a much larger tile shared with unrelated surroundings
-      //    (diluting the model's attention). Cropping directly around each
-      //    point guarantees the FULL circle is seen in one image, at the best
-      //    resolution the source affords — the "search area covered as well
-      //    as possible" this mode needs, especially with several points.
-      //  • drawn area — unchanged: filter the generic grid to tiles that
-      //    overlap it. A single contiguous region doesn't have the small-
-      //    circle coverage problem multiple scattered DIM points do, and the
-      //    grid's several higher-res sub-tiles already cover it well.
+      //  • DIM points — one region per point (as before), each carrying its
+      //    own circle shape.
+      //  • drawn area — now ALSO goes through buildAoiTiles instead of
+      //    filtering the generic whole-image grid down to overlapping tiles.
+      //    That filter sized tiles for the FULL orthophoto and could still
+      //    fragment a small drawn shape across multiple oversized, low-detail
+      //    tiles — the exact problem per-point tiling already solved for DIM
+      //    points, generalized here to any shape.
+      //  • neither — unchanged: the plain whole-image grid + overview.
+      //
+      // Every region also carries its precise shape so buildAoiTiles can draw
+      // the AOI boundary directly onto each crop (drawAoiMask) — the model
+      // gets an explicit visual scope cue, not just post-hoc filtering. A
+      // region larger than one crop can resolve well still gets its own
+      // region-scoped "step back" overview pass, so a restricted run never
+      // loses the area-scale detection pass an unrestricted run has.
       //
       // `tileHints` carries the operator notes for whichever DIM point(s)
       // produced each tile, keyed by object identity — each Tile object is
       // created once here and consumed by reference below, so this is safe
       // and avoids re-deriving tile/point overlap a second time.
-      let tasks: Tile[] = [overview, ...tiles];
+      let tasks: Tile[];
       const tileHints = new Map<Tile, string[]>();
+      let aoiShapes: OverlayShape[] = [];
+      let previewRegionRects: { gx: number; gy: number; gw: number; gh: number; label: string; number: number }[] =
+        [];
 
       if (geoRef && activeDimPoints.length > 0) {
-        const pointTiles = await buildDimPointTiles(
-          aligned.refUrl,
-          aligned.targetUrl,
-          activeDimPoints.map((p) => ({ id: p.id, rect: dimPointToNormalizedRect(geoRef, p) })),
-        );
-        if (pointTiles.length > 0) {
-          const byId = new Map(activeDimPoints.map((p) => [p.id, p]));
-          for (const tile of pointTiles) {
-            const hints = tile.pointIds
-              .map((id) => byId.get(id))
-              .filter((p): p is DimPoint => !!p)
-              .map(dimPointHint)
-              .filter((h) => h !== "")
-              .slice(0, 8);
-            tileHints.set(tile, hints);
-          }
-          tasks = pointTiles;
+        const byId = new Map(activeDimPoints.map((p) => [p.id, p]));
+        const regions: AoiRegion[] = activeDimPoints.map((p) => ({
+          id: p.id,
+          rect: dimPointToNormalizedRect(geoRef, p),
+          shapes: [dimPointToOverlayShape(geoRef, p)],
+          pointIds: [p.id],
+        }));
+        aoiShapes = regions.flatMap((r) => r.shapes ?? []);
+        const aoiTiles = await buildAoiTiles(aligned.refUrl, aligned.targetUrl, regions);
+        for (const tile of aoiTiles) {
+          const hints = tile.pointIds
+            .map((id) => byId.get(id))
+            .filter((p): p is DimPoint => !!p)
+            .map(dimPointHint)
+            .filter((h) => h !== "")
+            .slice(0, 8);
+          tileHints.set(tile, hints);
         }
+        tasks = aoiTiles;
+        previewRegionRects = aoiTiles.map((tl, i) => ({
+          gx: tl.gx,
+          gy: tl.gy,
+          gw: tl.gw,
+          gh: tl.gh,
+          label: tl.label,
+          number: i + 1,
+        }));
       } else if (geoRef && activeSearchArea) {
-        const rect = searchAreaToNormalizedRect(geoRef, activeSearchArea);
-        const restricted = tiles.filter((tile) =>
-          rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
-        );
-        tasks = restricted.length > 0 ? restricted : tiles;
+        const shape = searchAreaToOverlayShape(geoRef, activeSearchArea);
+        aoiShapes = [shape];
+        const region: AoiRegion = {
+          id: "area",
+          rect: searchAreaToNormalizedRect(geoRef, activeSearchArea),
+          shapes: [shape],
+        };
+        const aoiTiles = await buildAoiTiles(aligned.refUrl, aligned.targetUrl, [region]);
+        tasks = aoiTiles;
+        previewRegionRects = aoiTiles.map((tl, i) => ({
+          gx: tl.gx,
+          gy: tl.gy,
+          gw: tl.gw,
+          gh: tl.gh,
+          label: tl.label,
+          number: i + 1,
+        }));
+      } else {
+        const { overview, tiles } = await buildTiles(aligned.refUrl, aligned.targetUrl);
+        tasks = [overview, ...tiles];
+        previewRegionRects = tasks.map((tl, i) => ({
+          gx: tl.gx,
+          gy: tl.gy,
+          gw: tl.gw,
+          gh: tl.gh,
+          label: tl.label,
+          number: i + 1,
+        }));
       }
 
+      // Whether the crops in `tasks` carry the visual AOI mask/boundary —
+      // tells the detect/classify prompts what that overlay means (§ prompt.ts
+      // aoiMaskClause). Constant for the whole run, so it stays safe to send
+      // on every call sharing the same cached system prompt.
+      const aoiMasked = aoiShapes.length > 0;
       const hintsForTile = (tile: Tile): string[] => tileHints.get(tile) ?? [];
+      setPreviewShapes(aoiShapes);
+      setPreviewRegions(previewRegionRects);
 
       setPhase("detecting");
       setPhaseProgress({ done: 0, total: tasks.length });
@@ -473,6 +551,12 @@ export default function Home() {
         tasks,
         4,
         async (tile) => {
+          // Live preview: mark this tile's region as actively being analyzed
+          // right now, for the duration of its own API call — distinct from
+          // the full, static set of regions built during "splitting". Always
+          // cleared in `finally`, success or failure, so a rejected/errored
+          // call doesn't leave a stale highlight.
+          setPreviewActiveLabels((prev) => new Set(prev).add(tile.label));
           try {
             const res = await fetch("/api/analyze", {
               method: "POST",
@@ -487,6 +571,7 @@ export default function Home() {
                 effort,
                 includeVegetation,
                 hints: hintsForTile(tile),
+                aoiMasked,
               }),
             });
             const data = await res.json();
@@ -499,6 +584,17 @@ export default function Home() {
               ...c,
               bbox: mapToGlobal(tile, c.bbox),
             }));
+            // Live preview: stream this tile's raw detections in as soon as
+            // they arrive, before dedup/classification — see AnalysisPreview.
+            // Each tile's own response numbers its changes from "chg-1"
+            // independently, so accumulating them as-is collides across
+            // tiles; re-key with the tile's label for a preview-only id
+            // (the returned `changes` below keep their original ids, which
+            // is all downstream dedup/classification cares about).
+            if (changes.length > 0) {
+              const previewChanges = changes.map((c, idx) => ({ ...c, id: `${tile.label}-${idx}` }));
+              setPreviewRaw((prev) => [...prev, ...previewChanges]);
+            }
             return { changes, summary: data.summary ?? "", model: data.model ?? "", failed: false, usage: data.usage };
           } catch (e) {
             return {
@@ -509,6 +605,13 @@ export default function Home() {
               error: e instanceof Error ? e.message : String(e),
               status: (e as { status?: number })?.status,
             };
+          } finally {
+            setPreviewActiveLabels((prev) => {
+              const next = new Set(prev);
+              next.delete(tile.label);
+              return next;
+            });
+            setPreviewDoneLabels((prev) => new Set(prev).add(tile.label));
           }
         },
         onTaskDone,
@@ -538,6 +641,7 @@ export default function Home() {
       };
 
       const merged = dedupe(results.flatMap((r) => r.changes)).filter(inSearchScope);
+      setPreviewMerged(merged);
 
       // Second pass: re-examine every candidate on a zoomed-in crop to (a)
       // confirm it's a real physical change and drop artifacts
@@ -562,6 +666,8 @@ export default function Home() {
           aligned.refUrl,
           aligned.targetUrl,
           merged.map((c) => c.bbox),
+          1400,
+          aoiShapes,
         );
         let vDone = 0;
         const verified = await runPool<Change, Change | null>(
@@ -602,6 +708,7 @@ export default function Home() {
                           .filter((h) => h !== "")
                           .slice(0, 8)
                       : undefined,
+                  aoiMasked,
                 }),
               });
               const data = await res.json();
@@ -611,7 +718,12 @@ export default function Home() {
               }
               // Record spend even for a rejected candidate — the call still cost tokens.
               if (data.usage) verifyUsages.push(data.usage);
-              if (!data.genuine) return null;
+              if (!data.genuine) {
+                // Live preview: mark this candidate rejected so it fades out
+                // instead of sitting in limbo — see AnalysisPreview.
+                setPreviewRejected((prev) => new Set(prev).add(chg.id));
+                return null;
+              }
               // Accept the tightened box unless it's degenerate (rounded to
               // nothing) or it's the whole crop — "the entire crop changed" is
               // the shape a model returns when it didn't actually localize the
@@ -632,7 +744,7 @@ export default function Home() {
                 : chg.change_type;
               const vScore = typeof data.score === "number" ? data.score : chg.score;
               const matches: CategoryMatch[] = Array.isArray(data.matches) ? data.matches : [];
-              return {
+              const verifiedChg: Change = {
                 ...chg,
                 change_type: verifiedType,
                 score: vScore,
@@ -642,6 +754,9 @@ export default function Home() {
                 bbox: refinedOk ? refined : chg.bbox,
                 note: note || chg.note,
               };
+              // Live preview: this candidate is confirmed — see AnalysisPreview.
+              setPreviewClassified((prev) => [...prev, verifiedChg]);
+              return verifiedChg;
             } catch (e) {
               // Keep the raw detection so the difference isn't lost, but record
               // the failure so the run reports it instead of quietly showing an
@@ -980,13 +1095,48 @@ export default function Home() {
               )}
             </div>
             <div className="row" style={{ justifyContent: "space-between", gap: 12, marginTop: 8 }}>
-              <span style={{ fontSize: 13 }}>{progressMsg}</span>
+              <span style={{ fontSize: 13 }}>
+                {/* During "detecting", up to 4 tiles run concurrently (see
+                    runPool below) — the plain done/total count alone doesn't
+                    convey that, so show how many are in flight RIGHT NOW too.
+                    Computed live from previewActiveLabels (updated on every
+                    tile start/finish) rather than the static progressMsg,
+                    which only refreshes when a tile completes. */}
+                {phase === "detecting" && previewActiveLabels.size > 0
+                  ? t("progress.regionActive", {
+                      done: phaseProgress?.done ?? 0,
+                      total: phaseProgress?.total ?? 0,
+                      numbers: previewRegions
+                        .filter((r) => previewActiveLabels.has(r.label))
+                        .map((r) => r.number)
+                        .sort((a, b) => a - b)
+                        .join(", "),
+                    })
+                  : progressMsg}
+              </span>
               <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
                 {pct !== null && `${pct}% · `}
                 {elapsed.toFixed(1)}s
               </span>
             </div>
           </div>
+        )}
+
+        {busy && stage === "analyzing" && align && (
+          <AnalysisPreview
+            refUrl={align.refUrl}
+            width={align.width}
+            height={align.height}
+            phase={phase}
+            shapes={previewShapes}
+            regions={previewRegions}
+            activeLabels={previewActiveLabels}
+            doneLabels={previewDoneLabels}
+            raw={previewRaw}
+            merged={previewMerged}
+            classified={previewClassified}
+            rejectedIds={previewRejected}
+          />
         )}
 
         {rateLimitAlert && (

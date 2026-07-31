@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { CHANGE_COLORS, type Change, type DimPoint, type GeoRef, type SearchArea } from "@/lib/types";
 import { dimPointToOverlayShape, searchAreaToOverlayShape, type OverlayShape } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
+import ShapeOutline from "./ShapeOutline";
 
 type Mode = "old" | "new" | "slider" | "side";
 
@@ -85,41 +86,11 @@ export default function CompareView({
     }
   }, [refGeo, searchArea, dimPoints]);
 
-  const restrictionOutline = restrictionShapes.map((shape, i) =>
-    shape.kind === "ellipse" ? (
-      <ellipse
-        key={i}
-        cx={shape.cx * 100}
-        cy={shape.cy * 100}
-        rx={shape.rx * 100}
-        ry={shape.ry * 100}
-        fill="none"
-        stroke="#38bdf8"
-        strokeWidth={2}
-        strokeDasharray="3 2"
-        vectorEffect="non-scaling-stroke"
-      />
-    ) : (
-      <rect
-        key={i}
-        x={shape.x * 100}
-        y={shape.y * 100}
-        width={shape.w * 100}
-        height={shape.h * 100}
-        fill="none"
-        stroke="#38bdf8"
-        strokeWidth={2}
-        strokeDasharray="3 2"
-        vectorEffect="non-scaling-stroke"
-      />
-    ),
-  );
-
   const overlay = (maskId: string) =>
     showBoxes || restrictionShapes.length > 0 ? (
       <>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="overlay-svg">
-          {restrictionOutline}
+          <ShapeOutline shapes={restrictionShapes} />
           {showBoxes && spotlight && (
             <>
               <defs>

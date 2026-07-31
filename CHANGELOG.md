@@ -28,6 +28,10 @@ exists.
 
 _Nothing yet._
 
+## [1.7.0] — 2026-07-31
+
+- Analysis Preview: Include dynamically updating analysis preview to indeicate progress
+
 ## [1.6.1] — 2026-07-31
 
 - Name Column Width: Fix name column width to only fill remaining horizontal space
