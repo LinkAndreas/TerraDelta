@@ -571,6 +571,13 @@ export interface SearchArea {
 
 export const DEFAULT_RADIUS_M = 200;
 
+// DIM points get a wider default than a hand-drawn area. A point marks a
+// planning case rather than a pinpoint object, and its recorded coordinate is
+// typically the centroid of a parcel or procedure — so the change it refers to
+// routinely sits a few hundred metres off. 500 m covers that without pulling
+// in the next case.
+export const DEFAULT_DIM_RADIUS_M = 500;
+
 // ── DIM points (requires GeoTIFF input for both images) ───────────────────
 //
 // The second, independent way to say *where* to look: instead of one drawn

@@ -9,6 +9,7 @@ import CategorySection from "@/components/CategorySection";
 import CostSummary from "@/components/CostSummary";
 import Settings from "@/components/Settings";
 import Onboarding from "@/components/Onboarding";
+import Changelog from "@/components/Changelog";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
 import { buildTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
@@ -39,6 +40,7 @@ import {
 } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { APP_VERSION, HAS_UNRELEASED } from "@/lib/changelog";
 import {
   bandFromScore,
   CATEGORIES,
@@ -138,13 +140,12 @@ export default function Home() {
   // written in. Independent by design — entering UTM and exporting WGS84 (or
   // the reverse) is a normal combination. Positions themselves are always
   // stored as WGS84 lon/lat; see lib/crs.ts.
+  // Both default to EPSG:25832 and STAY there: the imagery's own CRS varies
+  // with whoever produced it, while the working system does not. The loaded
+  // image's EPSG is surfaced in the picker (marked, plus a one-click "use
+  // image CRS" button) rather than silently overriding the user's system.
   const [entryCrs, setEntryCrs] = useState<CoordSystem>(DEFAULT_COORD_SYSTEM);
   const [exportCrs, setExportCrs] = useState<CoordSystem>(DEFAULT_EXPORT_CRS);
-  // Once a georeferenced image is loaded, preselect the UTM zone its center
-  // actually falls in — the user should not have to work out that a Baden-
-  // Württemberg orthophoto is zone 32N. Only seeds the zone/hemisphere; the
-  // chosen format (and any manual zone edit afterwards) is left alone.
-  const [crsSeeded, setZoneSeeded] = useState(false);
 
   const [stage, setStage] = useState<Stage>("idle");
   // Which sub-step of the analyzing stage is running, and how far along it is
@@ -191,6 +192,7 @@ export default function Home() {
   const [showGuide, setShowGuide] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   const refreshModels = async () => {
     setIsFetchingModels(true);
@@ -247,15 +249,6 @@ export default function Home() {
     if (!loaded) return;
     localStorage.setItem(STORE_KEY, JSON.stringify({ provider, model, keys, currency, effort }));
   }, [loaded, provider, model, keys, currency, effort]);
-
-  useEffect(() => {
-    if (crsSeeded || !refMeta?.geo) return;
-    const { minLon, maxLon, minLat, maxLat } = geoRefBounds(refMeta.geo);
-    const seeded = coordSystemForProj4(refMeta.geo.proj4Def, (minLon + maxLon) / 2, (minLat + maxLat) / 2);
-    setEntryCrs(seeded);
-    setExportCrs(seeded);
-    setZoneSeeded(true);
-  }, [refMeta, crsSeeded]);
 
   // Extent and coordinate system of the reference orthophoto, derived once and
   // shared by the DIM import (which rejects out-of-scene points) and the CRS
@@ -715,7 +708,6 @@ export default function Home() {
     setSearchMode(DEFAULT_SEARCH_MODE);
     setSearchArea(null);
     setDimPoints([]);
-    setZoneSeeded(false);
     setAlign(null);
     setResult(null);
     setSelectedId(null);
@@ -1070,10 +1062,23 @@ export default function Home() {
         </span>
         {/* Pushed to the trailing edge on wide screens; the footer switches to
             a column below 720px (see globals.css), where it simply stacks. */}
-        <span style={{ marginLeft: "auto", fontSize: 13.5 }}>
+        <span className="row" style={{ marginLeft: "auto", gap: 12, fontSize: 13.5 }}>
+          <button
+            type="button"
+            className="version-btn"
+            onClick={() => setChangelogOpen(true)}
+            title={t("changelog.open", { v: APP_VERSION })}
+          >
+            v{APP_VERSION}
+            {/* A build carrying untagged changes says so, rather than
+                presenting itself as the last released version. */}
+            {HAS_UNRELEASED && <span aria-hidden> ·</span>}
+          </button>
           {t("footer.copyright", { year: new Date().getFullYear() })}
         </span>
       </footer>
+
+      <Changelog open={changelogOpen} onClose={() => setChangelogOpen(false)} />
 
       <Settings
         open={settingsOpen}

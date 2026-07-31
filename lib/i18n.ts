@@ -12,6 +12,10 @@ export const STRINGS = {
     "app.title": "TerraDelta",
     "app.tagline": "Orthophoto change detector",
     "footer.copyright": "© {year} Andreas Link",
+    "changelog.heading": "Release notes",
+    "changelog.open": "Version {v} — view release notes",
+    "changelog.close": "Close",
+    "changelog.unreleased": "Unreleased",
     "app.subtitle":
       "Compare two orthophotos of the same area and automatically find what changed — new or demolished buildings, roads, and land development — while ignoring season, lighting, and shadows.",
 
@@ -564,6 +568,10 @@ export const STRINGS = {
     "app.title": "TerraDelta",
     "app.tagline": "Veränderungserkennung für Orthophotos",
     "footer.copyright": "© {year} Andreas Link",
+    "changelog.heading": "Versionshinweise",
+    "changelog.open": "Version {v} — Versionshinweise anzeigen",
+    "changelog.close": "Schließen",
+    "changelog.unreleased": "Unveröffentlicht",
     "app.subtitle":
       "Vergleichen Sie zwei Orthophotos derselben Fläche und finden Sie automatisch, was sich verändert hat — neue oder abgerissene Gebäude, Straßen und Landentwicklung — Jahreszeit, Licht und Schatten werden dabei ignoriert.",
 

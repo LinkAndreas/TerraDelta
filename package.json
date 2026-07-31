@@ -1,14 +1,16 @@
 {
   "name": "terradelta",
-  "version": "0.1.0",
+  "version": "1.5.2",
   "private": true,
   "description": "AI-powered semantic change detection for aerial orthophotos.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev -p 32771 --webpack",
+    "prebuild": "node scripts/check-changelog.mjs",
     "build": "next build --webpack",
     "start": "next start -p 32771",
-    "lint": "next lint"
+    "lint": "next lint",
+    "changelog:check": "node scripts/check-changelog.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
