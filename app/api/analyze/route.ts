@@ -9,7 +9,7 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { reference, target, provider, model, apiKey, lang, effort, candidate, includeVegetation, hints } = body ?? {};
+    const { reference, target, provider, model, apiKey, lang, effort, candidate, includeVegetation, hints, aoiMasked } = body ?? {};
 
     if (typeof reference !== "string" || typeof target !== "string") {
       return NextResponse.json(
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       reference,
       target,
       includeVegetation: includeVegetation === true, // default false
+      aoiMasked: aoiMasked === true, // default false
       // Operator notes for this region. Bounded in count and length here as
       // well as client-side: this text is interpolated into the prompt, so the
       // route must not rely on the client to keep it small.

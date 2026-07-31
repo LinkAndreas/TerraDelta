@@ -4,7 +4,7 @@ import {
   buildDetectHints,
   buildClassifyHints,
   buildDetectSystem,
-  CLASSIFY_SYSTEM,
+  buildClassifySystem,
   buildResult,
   buildClassifyResult,
   dataUrlParts,
@@ -94,6 +94,10 @@ export async function anthropicDetect(
     effort?: Effort;
     includeVegetation?: boolean;
     hints?: string[];
+    // Whether this tile's crop carries the visual AOI mask/boundary (§
+    // lib/tiles.ts drawAoiMask) — tells the detector what that dashed
+    // boundary/dim overlay means.
+    aoiMasked?: boolean;
   },
 ): Promise<AnalyzeResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
@@ -114,7 +118,9 @@ export async function anthropicDetect(
     // be truncated mid-object (→ a parse failure that loses the whole tile).
     // 16000 gives ample headroom for the busiest tiles.
     max_tokens: 16000,
-    system: cachedSystem(buildDetectSystem({ includeVegetation: opts.includeVegetation })),
+    system: cachedSystem(
+      buildDetectSystem({ includeVegetation: opts.includeVegetation, aoiMasked: opts.aoiMasked }),
+    ),
     output_config: { effort: opts.effort, format: { type: "json_schema", schema: DETECT_SCHEMA } },
     messages: [
       {
@@ -249,6 +255,8 @@ export async function anthropicClassify(
     // candidate (§ prompt.ts buildClassifyHints) — a category tie-breaker,
     // never evidence of genuineness.
     hints?: string[];
+    // Whether this candidate's verify crop carries the visual AOI mask/boundary.
+    aoiMasked?: boolean;
   },
 ): Promise<ClassifyResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
@@ -277,7 +285,7 @@ export async function anthropicClassify(
     // CLASSIFY_SYSTEM carries the full catalog reference and is identical for
     // every candidate in a run, so caching it means only the first classify
     // call pays for those tokens.
-    system: cachedSystem(CLASSIFY_SYSTEM),
+    system: cachedSystem(buildClassifySystem({ aoiMasked: opts.aoiMasked })),
     output_config: { effort: opts.effort, format: { type: "json_schema", schema: CLASSIFY_SCHEMA } },
     messages: [
       {

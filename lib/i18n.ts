@@ -126,8 +126,30 @@ export const STRINGS = {
     "progress.aligning": "Aligning the two images…",
     "progress.splitting": "Splitting the image into close-up sections…",
     "progress.region": "Analyzing section {done}/{total}…",
+    "progress.regionActive": "Analyzing section {done}/{total} — now: {numbers}…",
     "progress.merging": "Combining results…",
     "progress.classifying": "Checking and classifying difference {done}/{total}…",
+
+    "preview.heading": "Live analysis preview",
+    "preview.legend.aoi": "Search area",
+    "preview.legend.region": "Region / tile",
+    "preview.legend.analyzing": "Analyzing now",
+    "preview.legend.done": "Done",
+    "preview.legend.raw": "Raw detection (unverified)",
+    "preview.legend.rawTip":
+      "The detector's first-pass guess for each tile, before duplicates across tiles are merged and a second pass confirms or rejects each one up close.",
+    "preview.rawExplainer":
+      "These are unverified first-pass detections — the same difference is often flagged by several tiles at once. They'll be merged next, then each one gets a close-up second look to confirm it's real (and classify it) or drop it as a false positive.",
+    "preview.legend.checking": "Checking…",
+    "preview.legend.confirmed": "Confirmed",
+    "preview.legend.rejected": "Rejected",
+    "preview.stat.regions": "regions done",
+    "preview.stat.active": "in flight",
+    "preview.stat.raw": "raw detections",
+    "preview.stat.candidates": "candidates",
+    "preview.stat.confirmed": "confirmed",
+    "preview.stat.rejected": "rejected",
+    "preview.stat.pending": "checking",
 
     "align.matched": "Images aligned ({n} matching points found)",
     "align.fallback": "Couldn't precisely align the images — results may be less accurate",
@@ -690,8 +712,30 @@ export const STRINGS = {
     "progress.aligning": "Die beiden Bilder werden ausgerichtet…",
     "progress.splitting": "Bild wird in Ausschnitte zerlegt…",
     "progress.region": "Analysiere Ausschnitt {done}/{total}…",
+    "progress.regionActive": "Analysiere Ausschnitt {done}/{total} — jetzt: {numbers}…",
     "progress.merging": "Ergebnisse werden zusammengeführt…",
     "progress.classifying": "Prüfe und klassifiziere Unterschied {done}/{total}…",
+
+    "preview.heading": "Live-Vorschau der Analyse",
+    "preview.legend.aoi": "Suchbereich",
+    "preview.legend.region": "Region / Ausschnitt",
+    "preview.legend.analyzing": "Wird analysiert",
+    "preview.legend.done": "Fertig",
+    "preview.legend.raw": "Rohe Erkennung (ungeprüft)",
+    "preview.legend.rawTip":
+      "Der erste Vorschlag des Detektors pro Ausschnitt — bevor Duplikate über mehrere Ausschnitte hinweg zusammengeführt und jeder einzelne in einem zweiten Durchgang aus der Nähe bestätigt oder verworfen wird.",
+    "preview.rawExplainer":
+      "Das sind ungeprüfte Ersterkennungen — dieselbe Veränderung wird oft von mehreren Ausschnitten gleichzeitig gemeldet. Sie werden als Nächstes zusammengeführt, und jede einzelne bekommt danach eine Nahaufnahme-Prüfung: bestätigt (und klassifiziert) oder als Fehlalarm verworfen.",
+    "preview.legend.checking": "Wird geprüft…",
+    "preview.legend.confirmed": "Bestätigt",
+    "preview.legend.rejected": "Verworfen",
+    "preview.stat.regions": "Regionen fertig",
+    "preview.stat.active": "gleichzeitig",
+    "preview.stat.raw": "rohe Erkennungen",
+    "preview.stat.candidates": "Kandidaten",
+    "preview.stat.confirmed": "bestätigt",
+    "preview.stat.rejected": "verworfen",
+    "preview.stat.pending": "wird geprüft",
 
     "align.matched": "Bilder ausgerichtet ({n} gefundene Übereinstimmungen)",
     "align.fallback": "Bilder konnten nicht präzise ausgerichtet werden — Ergebnisse evtl. ungenauer",
@@ -1153,6 +1197,19 @@ export interface I18n {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: StringKey, vars?: Record<string, string | number>) => string;
+}
+
+// A catalog category comes back from the model as its internal dot-syntax
+// key (e.g. "siedlungsflaeche.wohnbauflaeche") — meaningful for matching
+// against the schema/spec, but not something to show a user. Every leaf has
+// a matching "cat.<key>" translation (see the CATEGORIES block above); this
+// looks it up and falls back to the raw key only for a value the catalog
+// (or UNCLASSIFIED) genuinely has no translation for, so nothing is ever
+// silently hidden.
+export function categoryLabel(t: I18n["t"], category: string): string {
+  const key = `cat.${category}` as StringKey;
+  const label = t(key);
+  return label === key ? category : label;
 }
 
 export const I18nContext = createContext<I18n>({
