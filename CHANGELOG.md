@@ -2,16 +2,37 @@
 
 All notable changes to TerraDelta are recorded here.
 
-This file is the SINGLE SOURCE OF TRUTH for the in-app release notes — the app
-parses it directly (see lib/changelog.ts), so nothing has to be regenerated and
-nothing can drift out of date. Format follows [Keep a Changelog](https://keepachangelog.com);
-versions follow the repository's release tags.
+This file is the SINGLE SOURCE OF TRUTH for both the in-app release notes and
+the version number the app reports — `lib/changelog.ts` parses it directly, so
+there is nothing to regenerate and nothing that can drift.
+
+Format follows [Keep a Changelog](https://keepachangelog.com); versions match
+the repository's release tags.
 
 ## When cutting a release
 
-1. Move the items under `## [Unreleased]
+On the `release/x.y.z` branch:
+
+1. Move the items under `## [Unreleased]` into a new `## [x.y.z] — YYYY-MM-DD`
+   section, directly above the previous release.
+2. Set the matching `version` in package.json.
+
+`scripts/check-changelog.mjs` enforces step 1. It resolves the version being
+released from the git ref (the tag, or the `release/x.y.z` branch name) — not
+from package.json, which this project's release process does not touch. It runs
+locally on `npm run build` and in CI (`.github/workflows/changelog.yml`) while
+the release branch is still open, so a missing entry is caught before the tag
+exists.
+
+## [Unreleased]
 
 _Nothing yet._
+
+## [1.5.5] — 2026-07-31
+
+- The version badge reports the released version again — it was pinned to whatever package.json happened to say and had gone stale by two releases.
+- Release notes: the changelog is now checked against the git tag or release branch, so a release cannot be tagged without its entry.
+- Release notes: entries for 1.5.3 and 1.5.4, which shipped without any.
 
 ## [1.5.4] — 2026-07-31
 
