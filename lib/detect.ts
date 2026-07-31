@@ -33,6 +33,10 @@ export interface ClassifyRequest extends DetectRequest {
   };
 }
 
+// `hints` on ClassifyRequest (inherited from DetectRequest) carries the notes
+// for the DIM point(s) that contain THIS SPECIFIC candidate — computed by the
+// caller per-candidate, unlike detection's per-tile hints. See app/page.tsx.
+
 export async function detectChanges(req: DetectRequest): Promise<AnalyzeResult> {
   const meta = PROVIDERS[req.provider];
   if (!meta) throw new Error(`Unknown provider: ${req.provider}`);
@@ -60,5 +64,6 @@ export async function classifyDetectedChange(req: ClassifyRequest): Promise<Clas
     language: req.language,
     effort: req.effort,
     candidate: req.candidate,
+    hints: req.hints,
   });
 }

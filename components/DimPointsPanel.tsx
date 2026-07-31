@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n, type StringKey } from "@/lib/i18n";
 import CoordSystemPicker from "@/components/CoordSystemPicker";
+import Popover from "@/components/Popover";
 import {
   axisLabels,
   coordDecimals,
@@ -367,6 +368,12 @@ function PointRow({
   const meta = [point.municipality, point.district, point.nextReview && `→ ${point.nextReview}`]
     .filter(Boolean)
     .join(" · ");
+  // Both the imported description AND remark are shown right in the row (a
+  // single-line preview each, so a dozen-entry Bemerkung history never blows
+  // up the row height) — the popover trigger is only for reading the FULL
+  // text, not for hiding it entirely.
+  const hasDetails = !!(point.note || point.municipality || point.district || point.nextReview || point.lastUpdate);
+  const notePreview = point.note?.split(/\r?\n/)[0] ?? "";
 
   return (
     <tr
@@ -374,15 +381,18 @@ function PointRow({
       style={{ cursor: "pointer", background: selected ? "var(--accent-soft)" : undefined }}
     >
       <td style={{ verticalAlign: "top", paddingTop: 12 }}>{index}</td>
-      <td onClick={(e) => e.stopPropagation()} style={{ minWidth: 180 }}>
-        <input
-          type="text"
-          value={point.name}
-          disabled={disabled}
-          placeholder={t("dim.namePlaceholder")}
-          onChange={(e) => onChange({ name: e.target.value })}
-          style={{ width: "100%" }}
-        />
+      <td onClick={(e) => e.stopPropagation()} style={{ minWidth: 200 }}>
+        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+          <input
+            type="text"
+            value={point.name}
+            disabled={disabled}
+            placeholder={t("dim.namePlaceholder")}
+            onChange={(e) => onChange({ name: e.target.value })}
+            style={{ width: "100%", flex: 1, minWidth: 0 }}
+          />
+          {hasDetails && <DimPointDetailsPopover point={point} />}
+        </div>
         {meta && (
           <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
             {meta}
@@ -390,11 +400,17 @@ function PointRow({
         )}
         {point.note && (
           <div
-            className="muted dim-note-clamp"
-            style={{ fontSize: 11, marginTop: 2, fontStyle: "italic", whiteSpace: "pre-line" }}
-            title={point.note}
+            className="muted"
+            style={{
+              fontSize: 11,
+              marginTop: 2,
+              fontStyle: "italic",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
-            {point.note}
+            {notePreview}
           </div>
         )}
       </td>
@@ -432,6 +448,76 @@ function PointRow({
         )}
       </td>
     </tr>
+  );
+}
+
+// Full detail for one point — the imported Beschreibung and Bemerkung in
+// full, plus the small administrative metadata — shown in a Popover so a long
+// Bemerkung (routinely a dozen dated case-history lines) never has to expand
+// the row to be read.
+function DimPointDetailsPopover({ point }: { point: DimPoint }) {
+  const { t } = useI18n();
+  return (
+    <Popover trigger={<span aria-hidden>🗎</span>} triggerLabel={t("dim.details.tip")} triggerTitle={t("dim.details.tip")}>
+      <div style={{ display: "grid", gap: 8 }}>
+        <div>
+          <div className="field-label" style={{ marginBottom: 2 }}>
+            {t("dim.details.description")}
+          </div>
+          <div>{point.name || t("dim.unnamed")}</div>
+        </div>
+        <div>
+          <div className="field-label" style={{ marginBottom: 2 }}>
+            {t("dim.details.note")}
+          </div>
+          {point.note ? (
+            <div style={{ whiteSpace: "pre-line" }}>{point.note}</div>
+          ) : (
+            <div className="muted" style={{ fontStyle: "italic" }}>
+              {t("dim.details.noNote")}
+            </div>
+          )}
+        </div>
+        {(point.municipality || point.district || point.nextReview || point.lastUpdate) && (
+          <div
+            className="muted"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: "3px 10px",
+              fontSize: 11.5,
+              paddingTop: 6,
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            {point.municipality && (
+              <>
+                <span>{t("dim.details.municipality")}</span>
+                <span>{point.municipality}</span>
+              </>
+            )}
+            {point.district && (
+              <>
+                <span>{t("dim.details.district")}</span>
+                <span>{point.district}</span>
+              </>
+            )}
+            {point.nextReview && (
+              <>
+                <span>{t("dim.details.nextReview")}</span>
+                <span>{point.nextReview}</span>
+              </>
+            )}
+            {point.lastUpdate && (
+              <>
+                <span>{t("dim.details.lastUpdate")}</span>
+                <span>{point.lastUpdate}</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </Popover>
   );
 }
 
