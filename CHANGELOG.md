@@ -9,21 +9,20 @@ versions follow the repository's release tags.
 
 ## When cutting a release
 
-1. Move the items under `## [Unreleased]` into a new `## [x.y.z] — YYYY-MM-DD` section.
-2. Set the matching `version` in package.json.
+1. Move the items under `## [Unreleased]
 
-`npm run build` fails if those two disagree (scripts/check-changelog.mjs).
+_Nothing yet._
 
-## [Unreleased]
+## [1.5.4] — 2026-07-31
 
-- DIM points: restrict the analysis to a radius around each point of an imported point list.
-- DIM points: import from CSV and Excel (.xlsx); points outside the loaded orthophoto are skipped.
-- DIM points: the imported description is shown on the map and used as prior knowledge during detection.
-- Coordinate systems: pick the system by EPSG code (ETRS89/UTM, WGS 84/UTM, Gauß-Krüger, zE-N grids); EPSG:25832 is the default.
-- Exports: choose the coordinate system for CSV, PDF, GeoJSON and KML.
-- PDF report: fixed overlapping table columns, overprinted category cells, clipped headers and an incorrect page total.
-- PDF report: states when the export is a filtered view, and uses the same change numbering as the on-screen report.
-- Updated dependencies and closed the outstanding sharp/libvips advisories.
+- The deploy workflow can be triggered manually from the Actions tab.
+
+## [1.5.3] — 2026-07-31
+
+- In-app version badge in the footer, opening the release notes.
+- DIM points: EPSG:25832 stays preselected instead of being overridden by the orthophoto's own coordinate system.
+- DIM points: 500 m default search radius for imported and newly placed points.
+- DIM points: long remarks in the point list are truncated on a line boundary instead of being cut through the text.
 
 ## [1.5.2] — 2026-07-30
 

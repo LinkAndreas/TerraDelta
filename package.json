@@ -1,6 +1,6 @@
 {
   "name": "terradelta",
-  "version": "1.5.2",
+  "version": "1.5.4",
   "private": true,
   "description": "AI-powered semantic change detection for aerial orthophotos.",
   "license": "MIT",
