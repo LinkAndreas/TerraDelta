@@ -268,7 +268,15 @@ export default function DimPointsPanel({
         </div>
       ) : (
         <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-          <table>
+          <table style={{ tableLayout: "fixed", minWidth: 690 }}>
+            <colgroup>
+              <col style={{ width: 52 }} />
+              <col />
+              <col style={{ width: 142 }} />
+              <col style={{ width: 142 }} />
+              <col style={{ width: 102 }} />
+              <col style={{ width: 52 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th style={{ width: 28 }}>{t("th.num")}</th>
@@ -382,16 +390,23 @@ function PointRow({
     >
       <td style={{ verticalAlign: "top", paddingTop: 12 }}>{index}</td>
       <td onClick={(e) => e.stopPropagation()} style={{ minWidth: 200 }}>
-        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+        <div className="row" style={{ alignItems: "center" }}>
           <input
             type="text"
             value={point.name}
             disabled={disabled}
             placeholder={t("dim.namePlaceholder")}
             onChange={(e) => onChange({ name: e.target.value })}
-            style={{ width: "100%", flex: 1, minWidth: 0 }}
+            style={{
+              flex: "1 1 0",
+              minWidth: 0,
+            }}
           />
-          {hasDetails && <DimPointDetailsPopover point={point} />}
+          {hasDetails && (
+            <div style={{ marginLeft: 6, flex: "0 0 auto" }}>
+              <DimPointDetailsPopover point={point} />
+            </div>
+          )}
         </div>
         {meta && (
           <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
@@ -414,13 +429,13 @@ function PointRow({
           </div>
         )}
       </td>
-      <td onClick={(e) => e.stopPropagation()}>
+      <td onClick={(e) => e.stopPropagation()} style={{ width: 70 }}>
         <NumberCell value={x} decimals={decimals} disabled={disabled} onCommit={(n) => commitAxis("x", n)} />
       </td>
-      <td onClick={(e) => e.stopPropagation()}>
+      <td onClick={(e) => e.stopPropagation()} style={{ width: 70 }}>
         <NumberCell value={y} decimals={decimals} disabled={disabled} onCommit={(n) => commitAxis("y", n)} />
       </td>
-      <td onClick={(e) => e.stopPropagation()}>
+      <td onClick={(e) => e.stopPropagation()} style={{ width: 35 }}>
         <NumberCell
           value={point.radiusM}
           decimals={0}
