@@ -25,8 +25,16 @@ export interface ChangelogEntry {
   changes: string[];
 }
 
-// Single source of truth for the running version.
-export const APP_VERSION: string = pkg.version;
+// The version the app reports. Taken from the newest RELEASED section of
+// CHANGELOG.md rather than package.json, because this repository's release
+// process tags git and never touches package.json — anchoring to package.json
+// meant the badge froze at whatever version happened to be written there while
+// real releases came and went. Sourcing both the number and the notes from the
+// same file makes it impossible for them to disagree.
+//
+// package.json is kept in step by scripts/check-changelog.mjs (it still matters
+// for tooling); the fallback below only applies to a changelog with no released
+// section at all.
 
 // Section heading: "## [1.5.2] — 2026-07-30", "## [Unreleased]".
 // Brackets are optional and the date separator may be an em dash, en dash or
@@ -74,6 +82,8 @@ export const CHANGELOG: ChangelogEntry[] = parseChangelog(changelogMarkdown);
 
 // The newest entry that has actually been released — what the footer shows.
 export const LATEST_RELEASE: ChangelogEntry | undefined = CHANGELOG.find((e) => e.date !== null);
+
+export const APP_VERSION: string = LATEST_RELEASE?.version ?? pkg.version;
 
 // True when the running build carries changes not yet in a tagged release.
 export const HAS_UNRELEASED = CHANGELOG.some((e) => e.date === null);

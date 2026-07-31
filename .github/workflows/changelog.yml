@@ -1,0 +1,51 @@
+name: Changelog
+
+# Makes "release without release notes" impossible rather than merely
+# discouraged. The local `prebuild` hook runs the same script, but a developer
+# can skip it; this cannot be skipped.
+#
+# Two moments matter, and they are deliberately different:
+#
+#   • release/** and PRs into main — this is the one that PREVENTS the problem.
+#     It runs while the release branch is still open, so a missing entry is
+#     caught before the merge and before the tag exists, when adding it is
+#     still a normal commit.
+#
+#   • tag push — a backstop for a tag created outside that flow. By then the
+#     release has happened, so this only reports it, but a red check on the tag
+#     is far better than an app that quietly shows the wrong version.
+
+on:
+  push:
+    branches:
+      - "release/**"
+    tags:
+      - "*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Release notes present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The version under release comes from the ref (tag name or
+      # release/x.y.z branch). For a pull request GITHUB_REF is the merge ref,
+      # which carries no version — take it from the source branch instead.
+      - name: Resolve version under release
+        id: version
+        run: |
+          ref="${GITHUB_REF}"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            ref="refs/heads/${GITHUB_HEAD_REF}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: Check CHANGELOG.md
+        env:
+          GITHUB_REF: ${{ steps.version.outputs.ref }}
+        run: node scripts/check-changelog.mjs

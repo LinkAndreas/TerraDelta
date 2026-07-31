@@ -2,28 +2,48 @@
 
 All notable changes to TerraDelta are recorded here.
 
-This file is the SINGLE SOURCE OF TRUTH for the in-app release notes — the app
-parses it directly (see lib/changelog.ts), so nothing has to be regenerated and
-nothing can drift out of date. Format follows [Keep a Changelog](https://keepachangelog.com);
-versions follow the repository's release tags.
+This file is the SINGLE SOURCE OF TRUTH for both the in-app release notes and
+the version number the app reports — `lib/changelog.ts` parses it directly, so
+there is nothing to regenerate and nothing that can drift.
+
+Format follows [Keep a Changelog](https://keepachangelog.com); versions match
+the repository's release tags.
 
 ## When cutting a release
 
-1. Move the items under `## [Unreleased]` into a new `## [x.y.z] — YYYY-MM-DD` section.
+On the `release/x.y.z` branch:
+
+1. Move the items under `## [Unreleased]` into a new `## [x.y.z] — YYYY-MM-DD`
+   section, directly above the previous release.
 2. Set the matching `version` in package.json.
 
-`npm run build` fails if those two disagree (scripts/check-changelog.mjs).
+`scripts/check-changelog.mjs` enforces step 1. It resolves the version being
+released from the git ref (the tag, or the `release/x.y.z` branch name) — not
+from package.json, which this project's release process does not touch. It runs
+locally on `npm run build` and in CI (`.github/workflows/changelog.yml`) while
+the release branch is still open, so a missing entry is caught before the tag
+exists.
 
 ## [Unreleased]
 
-- DIM points: restrict the analysis to a radius around each point of an imported point list.
-- DIM points: import from CSV and Excel (.xlsx); points outside the loaded orthophoto are skipped.
-- DIM points: the imported description is shown on the map and used as prior knowledge during detection.
-- Coordinate systems: pick the system by EPSG code (ETRS89/UTM, WGS 84/UTM, Gauß-Krüger, zE-N grids); EPSG:25832 is the default.
-- Exports: choose the coordinate system for CSV, PDF, GeoJSON and KML.
-- PDF report: fixed overlapping table columns, overprinted category cells, clipped headers and an incorrect page total.
-- PDF report: states when the export is a filtered view, and uses the same change numbering as the on-screen report.
-- Updated dependencies and closed the outstanding sharp/libvips advisories.
+_Nothing yet._
+
+## [1.5.5] — 2026-07-31
+
+- The version badge reports the released version again — it was pinned to whatever package.json happened to say and had gone stale by two releases.
+- Release notes: the changelog is now checked against the git tag or release branch, so a release cannot be tagged without its entry.
+- Release notes: entries for 1.5.3 and 1.5.4, which shipped without any.
+
+## [1.5.4] — 2026-07-31
+
+- The deploy workflow can be triggered manually from the Actions tab.
+
+## [1.5.3] — 2026-07-31
+
+- In-app version badge in the footer, opening the release notes.
+- DIM points: EPSG:25832 stays preselected instead of being overridden by the orthophoto's own coordinate system.
+- DIM points: 500 m default search radius for imported and newly placed points.
+- DIM points: long remarks in the point list are truncated on a line boundary instead of being cut through the text.
 
 ## [1.5.2] — 2026-07-30
 

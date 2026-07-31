@@ -40,7 +40,7 @@ import {
 } from "@/lib/models";
 import { useI18n, LANG_NAMES, type Lang, type StringKey } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
-import { APP_VERSION, HAS_UNRELEASED } from "@/lib/changelog";
+import { APP_VERSION } from "@/lib/changelog";
 import {
   bandFromScore,
   CATEGORIES,
@@ -1070,9 +1070,6 @@ export default function Home() {
             title={t("changelog.open", { v: APP_VERSION })}
           >
             v{APP_VERSION}
-            {/* A build carrying untagged changes says so, rather than
-                presenting itself as the last released version. */}
-            {HAS_UNRELEASED && <span aria-hidden> ·</span>}
           </button>
           {t("footer.copyright", { year: new Date().getFullYear() })}
         </span>
