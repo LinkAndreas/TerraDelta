@@ -839,24 +839,6 @@ select.lang:hover {
   border-color: var(--accent);
 }
 
-/* Imported DIM remarks are multi-line case histories. Clamp to whole lines
-   with an ellipsis rather than a fixed pixel height — a height cut slices the
-   last line through the middle of its glyphs. The full text stays available on
-   the element's title attribute. */
-.dim-note-clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  /* Pin the line box and cap the height at an exact multiple of it, so the cut
-     lands on a line boundary even where the -webkit-box clamp is not honoured.
-     A plain pixel max-height (what this used to be) slices the last line
-     through the middle of its glyphs. */
-  line-height: 1.6;
-  max-height: 4.8em;
-  overflow: hidden;
-}
-
 /* DIM point labels on the search-area preview. Rendered as HTML (not SVG
    text) because the overlay SVG is stretched with preserveAspectRatio="none",
    which would distort glyphs. The label shows the imported description and

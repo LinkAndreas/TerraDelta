@@ -26,7 +26,9 @@ exists.
 
 ## [Unreleased]
 
-_Nothing yet._
+- DIM points: search coverage — each point gets its own tightly-cropped tile at full source resolution instead of sharing a generic grid tile, so a small search radius is never diluted or clipped at a tile boundary.
+- DIM points: the imported description and remark now inform classification, not just detection — used as a category tie-breaker on a candidate that falls inside a point's radius, never as evidence the change itself is genuine.
+- DIM points: both the description and the remark are shown in the point list, with a popover for the full text so a long remark history doesn't inflate every row.
 
 ## [1.5.5] — 2026-07-31
 

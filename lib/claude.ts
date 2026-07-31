@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CATEGORIES, MAX_CATEGORY_MATCHES, type AnalyzeResult, type ClassifyResult, type Effort, type SupportedModels, type TokenUsage } from "./types";
 import {
   buildDetectHints,
+  buildClassifyHints,
   buildDetectSystem,
   CLASSIFY_SYSTEM,
   buildResult,
@@ -244,6 +245,10 @@ export async function anthropicClassify(
     // object in a crop that is mostly context, and tends to return either the
     // whole crop or a box around the wrong thing.
     candidate: { change_type: string; description: string; bbox?: [number, number, number, number] };
+    // Operator notes for the DIM point(s) whose search radius contains this
+    // candidate (§ prompt.ts buildClassifyHints) — a category tie-breaker,
+    // never evidence of genuineness.
+    hints?: string[];
   },
 ): Promise<ClassifyResult> {
   const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
@@ -293,6 +298,7 @@ export async function anthropicClassify(
                 : "") +
               "Decide whether it is a genuine physical change, map it onto the catalog (always one best category, plus up to " +
               `${MAX_CATEGORY_MATCHES - 1} alternatives, each with a fit percentage), tighten the box, and return the JSON.` +
+              buildClassifyHints(opts.hints ?? []) +
               classifyLanguageInstruction(opts.language),
           },
         ],

@@ -4,6 +4,7 @@
 // back to global coordinates and de-duplicates overlapping detections.
 
 import { bandFromScore, type Change } from "./types";
+import type { NormalizedRect } from "./geo";
 
 export interface Tile {
   refUrl: string;
@@ -117,6 +118,131 @@ export async function buildTiles(
   if (cols * rows > 4) addGrid(2, 2, "q-");
 
   return { overview, tiles };
+}
+
+export interface DimPointTile extends Tile {
+  // Which DIM points' (padded) search rects contributed to this crop — lets
+  // the caller attach exactly the right operator notes to it, and nothing
+  // else. Usually one id; more when nearby points were merged (below).
+  pointIds: string[];
+}
+
+// Dedicated per-point tiling for DIM-point search restriction — coverage §5.
+//
+// The generic whole-image grid (buildTiles above) is sized for the image as a
+// whole, not for any one search circle: filtering it down to "tiles that
+// happen to overlap a point's bounding rect" is loose in two ways that matter
+// for a SMALL circle (a typical DIM radius is 200-2000 m, often a sliver of a
+// district-wide orthophoto):
+//   • the circle can straddle a tile boundary, so no single tile the model
+//     sees actually contains the whole thing — each one shows only a wedge;
+//   • even a tile that fully contains it also contains a lot of unrelated
+//     surrounding area, at whatever resolution the fixed grid assigned that
+//     region, diluting the model's attention on the one thing being searched.
+//
+// Cropping directly around each point's own rect (with padding for context)
+// sidesteps both: the model always sees the full circle in one image, at the
+// best resolution the source affords (capped at maxTilePx, same principle as
+// the verification crops in buildVerifyCrops below). Points whose padded rects
+// overlap are merged into a single shared tile — common when a DIM list has
+// several nearby cases — so they're analyzed together once instead of paying
+// for near-duplicate overlapping crops.
+export async function buildDimPointTiles(
+  refUrl: string,
+  targetUrl: string,
+  points: { id: string; rect: NormalizedRect }[],
+  opts?: { padding?: number; maxTilePx?: number; maxTiles?: number },
+): Promise<DimPointTile[]> {
+  if (points.length === 0) return [];
+  const padding = opts?.padding ?? 0.35;
+  const maxTilePx = opts?.maxTilePx ?? 1400;
+  const maxTiles = opts?.maxTiles ?? 40;
+
+  const ref = await imgFromUrl(refUrl);
+  const tgt = await imgFromUrl(targetUrl);
+  const W = ref.naturalWidth;
+  const H = ref.naturalHeight;
+
+  interface Group {
+    ids: string[];
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  }
+
+  let groups: Group[] = points.map(({ id, rect }) => {
+    const w = rect.x1 - rect.x0;
+    const h = rect.y1 - rect.y0;
+    const px = w * padding;
+    const py = h * padding;
+    return {
+      ids: [id],
+      x0: Math.max(0, rect.x0 - px),
+      y0: Math.max(0, rect.y0 - py),
+      x1: Math.min(1, rect.x1 + px),
+      y1: Math.min(1, rect.y1 + py),
+    };
+  });
+
+  // Repeated-pass union-merge of overlapping groups. DIM lists here are tens
+  // of points, not thousands, so an O(n^2)-per-pass scan is effectively
+  // instant; a proper union-find would be premature for this input size.
+  for (let pass = 0; pass < groups.length; pass++) {
+    let mergedAny = false;
+    outer: for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i];
+        const b = groups[j];
+        const overlap = a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+        if (!overlap) continue;
+        const merged: Group = {
+          ids: [...a.ids, ...b.ids],
+          x0: Math.min(a.x0, b.x0),
+          y0: Math.min(a.y0, b.y0),
+          x1: Math.max(a.x1, b.x1),
+          y1: Math.max(a.y1, b.y1),
+        };
+        groups = [...groups.slice(0, i), merged, ...groups.slice(i + 1, j), ...groups.slice(j + 1)];
+        mergedAny = true;
+        break outer;
+      }
+    }
+    if (!mergedAny) break;
+  }
+
+  // Cost guard for a pathological import (hundreds of scattered points inside
+  // one scene): keep the groups covering the most points/area rather than
+  // silently issuing an unbounded number of model calls. Ordinary use — tens
+  // of points — never reaches this.
+  if (groups.length > maxTiles) {
+    groups = groups
+      .slice()
+      .sort(
+        (a, b) =>
+          b.ids.length - a.ids.length || (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0),
+      )
+      .slice(0, maxTiles);
+  }
+
+  return groups.map((g, i) => {
+    const x0 = Math.floor(g.x0 * W);
+    const y0 = Math.floor(g.y0 * H);
+    const x1 = Math.ceil(g.x1 * W);
+    const y1 = Math.ceil(g.y1 * H);
+    const sw = Math.max(1, x1 - x0);
+    const sh = Math.max(1, y1 - y0);
+    return {
+      refUrl: cropToUrl(ref, x0, y0, sw, sh, maxTilePx),
+      targetUrl: cropToUrl(tgt, x0, y0, sw, sh, maxTilePx),
+      gx: x0 / W,
+      gy: y0 / H,
+      gw: sw / W,
+      gh: sh / H,
+      label: `dim-${i + 1}`,
+      pointIds: g.ids,
+    };
+  });
 }
 
 // Zoomed crops around candidate detections for the verification pass: each

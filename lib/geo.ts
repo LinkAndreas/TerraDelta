@@ -300,6 +300,16 @@ export function dimPointForChange(geo: GeoRef, points: readonly DimPoint[], chan
   return placedDimPoints(points).find((p) => isPointInSearchArea(dimPointToArea(p), lon, lat)) ?? null;
 }
 
+// ALL DIM points whose search radius contains a change's center — usually 0
+// or 1, but genuinely more when two points' radii overlap. Used to gather
+// every relevant operator note for classification (§ app/page.tsx), where a
+// single first-match pick would silently drop a second, equally-applicable
+// hint.
+export function dimPointsForChange(geo: GeoRef, points: readonly DimPoint[], change: Change): DimPoint[] {
+  const [lon, lat] = changeCenterLonLat(geo, change);
+  return placedDimPoints(points).filter((p) => isPointInSearchArea(dimPointToArea(p), lon, lat));
+}
+
 // Per-point bounding rects, for tile pruning: a tile is analyzed when it
 // overlaps ANY of them. Kept as a list rather than one merged rect — points
 // can be kilometres apart, and a single hull around them would defeat the

@@ -125,6 +125,35 @@ export function buildDetectSystem(opts?: { includeVegetation?: boolean }): strin
   return DETECT_SYSTEM + vegetationClause(opts?.includeVegetation ?? false);
 }
 
+// Same operator notes as buildDetectHints, appended to a CLASSIFY call for a
+// candidate that falls inside one or more DIM points' search radii — for the
+// USER message, for the same cache-locality reason.
+//
+// The framing differs from detection on purpose. At this stage the candidate
+// has already been reported as a visible difference; the notes can no longer
+// hallucinate a change into existence the way they could at detection. What
+// they CAN do here is resolve genuine ambiguity: the catalog often offers
+// several plausible categories for the same physical object (a new paved
+// surface could be "strasse", "platz.parkplatz", or
+// "siedlungsflaeche.industrie_gewerbeflaeche"), and an operator note that says
+// what kind of project this location is under can settle exactly that. So the
+// notes are offered as a tie-breaker for JOB 2 (classification), never as
+// license to relax JOB 1 (confirming the difference is real) or to inflate
+// confidence — that must stay grounded in the two crops alone.
+export function buildClassifyHints(hints: string[]): string {
+  if (hints.length === 0) return "";
+  const list = hints.map((h, i) => `${i + 1}. ${h}`).join("\n");
+  return `
+
+PRIOR KNOWLEDGE — this location falls within one or more of the operator's monitored points, with these notes attached:
+${list}
+
+How to use these notes:
+- Use them ONLY to help JOB 2 (choosing the best-fitting catalog category) when several categories are genuinely plausible — a note describing the kind of project at this location can settle which one actually applies.
+- They do NOT affect JOB 1: genuine must be judged from the two crops alone. Do not mark a difference genuine, or raise its confidence, because a note agrees with it — a note may describe a plan that was never built or that is years out of date.
+- If a note doesn't match what you actually see, trust the crops and ignore the note — it is context, not ground truth.`;
+}
+
 // ── Stage 2: classification onto the catalog + genuineness check ────────────
 
 // The full catalog, described once as a REFERENCE for the classifier (not as a

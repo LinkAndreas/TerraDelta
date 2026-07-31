@@ -12,17 +12,16 @@ import Onboarding from "@/components/Onboarding";
 import Changelog from "@/components/Changelog";
 import Logo from "@/components/Logo";
 import { alignImages, loadOpenCv, type AlignResult } from "@/lib/align";
-import { buildTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
+import { buildTiles, buildDimPointTiles, buildVerifyCrops, mapToGlobal, mapToTile, dedupe, type Tile } from "@/lib/tiles";
 import {
   rectsOverlap,
   searchAreaToNormalizedRect,
   changeInSearchArea,
   changeInAnyDimPoint,
-  dimPointRects,
+  dimPointsForChange,
   dimPointToNormalizedRect,
   placedDimPoints,
   geoRefBounds,
-  type NormalizedRect,
 } from "@/lib/geo";
 import {
   DEFAULT_COORD_SYSTEM,
@@ -381,47 +380,63 @@ export default function Home() {
       setPhaseProgress(null);
       setProgressMsg(t("progress.splitting"));
       const { overview, tiles } = await buildTiles(aligned.refUrl, aligned.targetUrl);
+      const geoRef = refMeta?.geo;
 
-      // §1: when the search area is enabled, only analyze regions that
-      // overlap the requested area (using the reference image's GeoTIFF
-      // georeferencing — see lib/geo.ts for why only the reference is needed).
-      // Both restriction modes reduce to the same thing here: a set of
-      // normalized rects on the reference image that a tile must overlap to be
-      // worth analyzing. One rect for the drawn area, one per DIM point (kept
-      // separate rather than merged into a hull — points can be kilometres
-      // apart, and their hull would cover the whole image and prune nothing).
-      const searchRects: NormalizedRect[] = refMeta?.geo
-        ? activeSearchArea
-          ? [searchAreaToNormalizedRect(refMeta.geo, activeSearchArea)]
-          : dimPointRects(refMeta.geo, activeDimPoints)
-        : [];
+      // §1/§5: when the search restriction is enabled, only analyze regions
+      // that matter for it — using the reference image's GeoTIFF
+      // georeferencing (see lib/geo.ts for why only the reference is needed).
+      // The two restriction modes are handled differently on purpose:
+      //
+      //  • DIM points — one dedicated, tightly-cropped tile per point (via
+      //    buildDimPointTiles), rather than filtering the generic whole-image
+      //    grid down to tiles that merely overlap a point's bounding rect.
+      //    That filter is loose for a small search radius: a circle can
+      //    straddle a tile boundary (so no single tile shows all of it), or
+      //    sit inside a much larger tile shared with unrelated surroundings
+      //    (diluting the model's attention). Cropping directly around each
+      //    point guarantees the FULL circle is seen in one image, at the best
+      //    resolution the source affords — the "search area covered as well
+      //    as possible" this mode needs, especially with several points.
+      //  • drawn area — unchanged: filter the generic grid to tiles that
+      //    overlap it. A single contiguous region doesn't have the small-
+      //    circle coverage problem multiple scattered DIM points do, and the
+      //    grid's several higher-res sub-tiles already cover it well.
+      //
+      // `tileHints` carries the operator notes for whichever DIM point(s)
+      // produced each tile, keyed by object identity — each Tile object is
+      // created once here and consumed by reference below, so this is safe
+      // and avoids re-deriving tile/point overlap a second time.
       let tasks: Tile[] = [overview, ...tiles];
-      if (searchRects.length > 0) {
+      const tileHints = new Map<Tile, string[]>();
+
+      if (geoRef && activeDimPoints.length > 0) {
+        const pointTiles = await buildDimPointTiles(
+          aligned.refUrl,
+          aligned.targetUrl,
+          activeDimPoints.map((p) => ({ id: p.id, rect: dimPointToNormalizedRect(geoRef, p) })),
+        );
+        if (pointTiles.length > 0) {
+          const byId = new Map(activeDimPoints.map((p) => [p.id, p]));
+          for (const tile of pointTiles) {
+            const hints = tile.pointIds
+              .map((id) => byId.get(id))
+              .filter((p): p is DimPoint => !!p)
+              .map(dimPointHint)
+              .filter((h) => h !== "")
+              .slice(0, 8);
+            tileHints.set(tile, hints);
+          }
+          tasks = pointTiles;
+        }
+      } else if (geoRef && activeSearchArea) {
+        const rect = searchAreaToNormalizedRect(geoRef, activeSearchArea);
         const restricted = tiles.filter((tile) =>
-          searchRects.some((rect) =>
-            rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
-          ),
+          rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }),
         );
         tasks = restricted.length > 0 ? restricted : tiles;
       }
 
-      // §5: in DIM-point mode the imported descriptions are prior knowledge
-      // about what may have changed at each location, so each region is
-      // analyzed together with the notes for the points it covers. The prompt
-      // frames them as orientation rather than evidence (see prompt.ts
-      // buildDetectHints) — a note must never conjure a change that isn't
-      // visible in the imagery.
-      const geoRef = refMeta?.geo;
-      const pointRects =
-        geoRef && activeDimPoints.length > 0
-          ? activeDimPoints.map((p) => ({ point: p, rect: dimPointToNormalizedRect(geoRef, p) }))
-          : [];
-      const hintsForTile = (tile: Tile): string[] =>
-        pointRects
-          .filter(({ rect }) => rectsOverlap(rect, { gx: tile.gx, gy: tile.gy, gw: tile.gw, gh: tile.gh }))
-          .map(({ point }) => dimPointHint(point))
-          .filter((h) => h !== "")
-          .slice(0, 8);
+      const hintsForTile = (tile: Tile): string[] => tileHints.get(tile) ?? [];
 
       setPhase("detecting");
       setPhaseProgress({ done: 0, total: tasks.length });
@@ -573,6 +588,20 @@ export default function Home() {
                     // object in a crop that is mostly context.
                     bbox: mapToTile(crops[i], chg.bbox),
                   },
+                  // §5: operator notes for the DIM point(s) whose search radius
+                  // actually contains this candidate — precise per-change,
+                  // unlike detection's per-tile hints. Both the imported
+                  // description AND remark feed classification here (via
+                  // dimPointHint), used as a category tie-breaker only (see
+                  // prompt.ts buildClassifyHints) — never as evidence the
+                  // change itself is genuine.
+                  hints:
+                    geoRef && activeDimPoints.length > 0
+                      ? dimPointsForChange(geoRef, activeDimPoints, chg)
+                          .map(dimPointHint)
+                          .filter((h) => h !== "")
+                          .slice(0, 8)
+                      : undefined,
                 }),
               });
               const data = await res.json();
