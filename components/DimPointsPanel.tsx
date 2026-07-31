@@ -14,7 +14,7 @@ import {
   type CoordSystem,
 } from "@/lib/crs";
 import { DIM_CSV_COLUMNS, DIM_CSV_TEMPLATE, parseDimCsv, parseDimXlsx, type DimCsvResult } from "@/lib/dimCsv";
-import { DEFAULT_RADIUS_M, isDimPointPlaced, type DimPoint } from "@/lib/types";
+import { DEFAULT_DIM_RADIUS_M, DEFAULT_RADIUS_M, isDimPointPlaced, type DimPoint } from "@/lib/types";
 
 interface Props {
   points: DimPoint[];
@@ -51,7 +51,7 @@ export default function DimPointsPanel({
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [showFormat, setShowFormat] = useState(false);
-  const [defaultRadius, setDefaultRadius] = useState(DEFAULT_RADIUS_M);
+  const [defaultRadius, setDefaultRadius] = useState(DEFAULT_DIM_RADIUS_M);
   const [importResult, setImportResult] = useState<DimCsvResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -390,8 +390,8 @@ function PointRow({
         )}
         {point.note && (
           <div
-            className="muted"
-            style={{ fontSize: 11, marginTop: 2, fontStyle: "italic", whiteSpace: "pre-line", maxHeight: 44, overflow: "hidden" }}
+            className="muted dim-note-clamp"
+            style={{ fontSize: 11, marginTop: 2, fontStyle: "italic", whiteSpace: "pre-line" }}
             title={point.note}
           >
             {point.note}

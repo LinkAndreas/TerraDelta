@@ -9,6 +9,7 @@ npm-debug.log*
 !.env.example
 !.env*.example
 *.md
+!CHANGELOG.md
 .DS_Store
 Dockerfile
 .dockerignore

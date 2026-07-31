@@ -17,6 +17,7 @@ import {
   type CoordSystem,
 } from "@/lib/crs";
 import {
+  DEFAULT_DIM_RADIUS_M,
   DEFAULT_RADIUS_M,
   type DimPoint,
   type GeoRef,
@@ -112,7 +113,7 @@ export default function SearchAreaSection({
       name: "",
       lat,
       lon,
-      radiusM: DEFAULT_RADIUS_M,
+      radiusM: DEFAULT_DIM_RADIUS_M,
     };
     setDimPoints([...dimPoints, point]);
     setSelectedPointId(point.id);
