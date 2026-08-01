@@ -26,7 +26,7 @@ exists.
 
 ## [Unreleased]
 
-_Nothing yet._
+- Demo Mode: Fix the earlier/later demo images being swapped, which also had every cached change's direction (added/removed) and description backwards; also added a "Try demo" button next to the settings button in the topbar.
 
 ## [1.8.0] — 2026-08-01
 
