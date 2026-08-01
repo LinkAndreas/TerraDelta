@@ -67,6 +67,23 @@ import { DEFAULT_SEARCH_MODE, dimPointHint } from "@/lib/types";
 
 const STORE_KEY = "orthophoto-diff:settings";
 
+// Demo Mode: a bundled orthophoto pair (public/demo) that lets a visitor see
+// a full report with zero setup. With no API key configured, the request to
+// /demo/result.json below serves a previously captured, real analysis of
+// this exact pair instead of calling the model — so Demo Mode works even
+// with no key on the server or in the browser. With a key configured, the
+// button instead runs the normal live pipeline on the same images.
+const DEMO_MANIFEST_URL = "/demo/manifest.json";
+const DEMO_RESULT_URL = "/demo/result.json";
+
+interface DemoManifestEntry {
+  url: string;
+  ext: string;
+  geo: UploadMeta["geo"];
+  width: number;
+  height: number;
+}
+
 type Stage = "idle" | "loading" | "aligning" | "analyzing";
 
 const STAGE_KEY: Record<Stage, StringKey> = {
@@ -164,6 +181,15 @@ export default function Home() {
   const [align, setAlign] = useState<AlignResult | null>(null);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Demo Mode: true once the bundled demo pair is loaded (cleared by any
+  // manual upload or startOver) — drives the "cached demo" banner so a
+  // no-key run is never mistaken for a live one. `demoPending` bridges the
+  // gap between setting refUrl/targetUrl (async state) and kicking off the
+  // run that needs them, since both must be committed first.
+  const [isDemo, setIsDemo] = useState(false);
+  const [demoPending, setDemoPending] = useState<"live" | "cached" | null>(null);
+  const [demoLoadError, setDemoLoadError] = useState<string | null>(null);
 
   // Live analysis preview (shown only while `busy`, see AnalysisPreview): the
   // AOI shape(s), the region/tile boundaries built during "splitting", raw
@@ -839,6 +865,84 @@ export default function Home() {
     }
   }
 
+  // Loads the bundled demo orthophoto pair (§ DEMO_MANIFEST_URL) and queues a
+  // run — live if a key is configured, otherwise the cached result below.
+  // refUrl/targetUrl are only committed once this returns, so the actual run
+  // is deferred to the effect below rather than called inline here.
+  async function loadDemo() {
+    if (busy) return;
+    setError(null);
+    setDemoLoadError(null);
+    setRateLimitAlert(false);
+    try {
+      const res = await fetch(DEMO_MANIFEST_URL);
+      if (!res.ok) throw new Error("Failed to load demo images.");
+      const manifest: { reference: DemoManifestEntry; target: DemoManifestEntry } = await res.json();
+      setIsDemo(true);
+      setRefUrl(manifest.reference.url);
+      setTargetUrl(manifest.target.url);
+      setRefMeta({ ext: manifest.reference.ext, geo: manifest.reference.geo, width: manifest.reference.width, height: manifest.reference.height, fileSizeBytes: 0 });
+      setTargetMeta({ ext: manifest.target.ext, geo: manifest.target.geo, width: manifest.target.width, height: manifest.target.height, fileSizeBytes: 0 });
+      setSearchAreaEnabled(false);
+      setSearchArea(null);
+      setDimPoints([]);
+      setDemoPending(hasKey ? "live" : "cached");
+    } catch (e) {
+      setDemoLoadError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Aligns the demo pair locally (OpenCV, no API key needed) and loads the
+  // pre-captured analysis result instead of calling /api/analyze — so Demo
+  // Mode works with no key at all, server or browser.
+  async function runDemoCached() {
+    if (!refUrl || !targetUrl) return;
+    setError(null);
+    setResult(null);
+    setSelectedId(null);
+    setOptionsOpen(false);
+    startRef.current = Date.now();
+    setElapsed(0);
+    try {
+      setStage("loading");
+      setProgressMsg(t("progress.initEngine"));
+      await loadOpenCv();
+
+      setStage("aligning");
+      setProgressMsg(t("progress.aligning"));
+      const aligned = await alignImages(refUrl, targetUrl, 2600);
+      setAlign(aligned);
+
+      setStage("analyzing");
+      setPhase("classifying");
+      setPhaseProgress(null);
+      setProgressMsg(t("demo.loadingCached"));
+      const res = await fetch(DEMO_RESULT_URL);
+      if (!res.ok) throw new Error("Failed to load the cached demo result.");
+      const cached: AnalyzeResult = await res.json();
+      setResult(cached);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("error.generic"));
+    } finally {
+      setStage("idle");
+      setPhase(null);
+      setPhaseProgress(null);
+      setProgressMsg("");
+    }
+  }
+
+  useEffect(() => {
+    if (!demoPending || !refUrl || !targetUrl) return;
+    const mode = demoPending;
+    setDemoPending(null);
+    if (mode === "live") {
+      run();
+    } else {
+      runDemoCached();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoPending, refUrl, targetUrl]);
+
   // Clears everything specific to this comparison run (images, alignment,
   // results, filters) so the user can start a fresh comparison — but leaves
   // standing preferences (category selection, provider/model/key, currency,
@@ -848,6 +952,7 @@ export default function Home() {
     setTargetUrl(null);
     setRefMeta(null);
     setTargetMeta(null);
+    setIsDemo(false);
     setSearchAreaEnabled(false);
     setSearchMode(DEFAULT_SEARCH_MODE);
     setSearchArea(null);
@@ -948,6 +1053,7 @@ export default function Home() {
             url={refUrl}
             disabled={busy}
             onFile={(dataUrl, meta) => {
+              setIsDemo(false);
               setRefUrl(dataUrl);
               setRefMeta(meta);
               if (!meta.geo) {
@@ -963,6 +1069,7 @@ export default function Home() {
             url={targetUrl}
             disabled={busy}
             onFile={(dataUrl, meta) => {
+              setIsDemo(false);
               setTargetUrl(dataUrl);
               setTargetMeta(meta);
               if (!meta.geo) {
@@ -973,6 +1080,22 @@ export default function Home() {
             }}
           />
         </div>
+
+        {!refUrl && !targetUrl && (
+          <div className="row" style={{ marginTop: 12, alignItems: "center", gap: 10 }}>
+            <button type="button" className="btn-secondary" onClick={loadDemo} disabled={busy} title={t("demo.tip")}>
+              {t("demo.try")}
+            </button>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {hasKey ? t("demo.hintLive") : t("demo.hintCached")}
+            </span>
+          </div>
+        )}
+        {demoLoadError && (
+          <div className="error" style={{ marginTop: 12 }}>
+            {demoLoadError}
+          </div>
+        )}
 
         {formatMismatch && (
           <div className="error" style={{ marginTop: 12 }}>
@@ -1158,6 +1281,15 @@ export default function Home() {
 
       {result && align && (
         <>
+          {isDemo && (
+            <div className="alert" style={{ marginBottom: 16 }}>
+              <span className="alert-icon" aria-hidden>ℹ</span>
+              <div>
+                <strong>{t("demo.banner.heading")}</strong>
+                <p style={{ margin: "4px 0 0" }}>{t(hasKey ? "demo.banner.bodyLive" : "demo.banner.bodyCached")}</p>
+              </div>
+            </div>
+          )}
           <div className="row" style={{ justifyContent: "flex-end", marginBottom: 16 }}>
             <button className="btn-secondary" type="button" onClick={startOver} title={t("run.startOverTip")}>
               {t("run.startOver")}
@@ -1235,13 +1367,19 @@ export default function Home() {
       )}
 
       <footer className="footer">
-        <Logo size={20} />
-        <span>
-          <strong style={{ color: "var(--text)" }}>TerraDelta</strong> · {t("app.tagline")}
+        <span className="footer-brand">
+          <span className="row footer-title">
+            <Logo size={16} />
+            <strong style={{ color: "var(--text)" }}>TerraDelta</strong>
+          </span>
+          <span className="footer-dot" aria-hidden="true">
+            ·
+          </span>
+          <span className="footer-tagline">{t("app.tagline")}</span>
         </span>
         {/* Pushed to the trailing edge on wide screens; the footer switches to
             a column below 720px (see globals.css), where it simply stacks. */}
-        <span className="row" style={{ marginLeft: "auto", gap: 12, fontSize: 13.5 }}>
+        <span className="row footer-meta" style={{ gap: 12, fontSize: 13.5 }}>
           <button
             type="button"
             className="version-btn"

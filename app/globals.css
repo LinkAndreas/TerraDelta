@@ -113,6 +113,22 @@ h3 {
   font-size: 14.5px;
 }
 
+.footer-brand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.footer-title {
+  gap: 6px;
+  line-height: 1;
+}
+
+.footer-meta {
+  margin-left: auto;
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -1498,6 +1514,21 @@ select.lang:hover {
     align-items: flex-start;
   }
 
+  .footer-brand {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .footer-dot {
+    display: none;
+  }
+
+  .footer-meta {
+    margin-left: 0;
+    align-self: flex-end;
+  }
+
   .modal-panel {
     max-width: 100%;
     margin: 0;
@@ -1526,7 +1557,7 @@ select.lang:hover {
      a segmented group (e.g. the category preset tabs) stretched to 100% of
      its own width inside an inline-flex row, blowing the row way past the
      viewport and forcing horizontal scroll. */
-  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn):not(.category-disclosure) {
+  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn):not(.category-disclosure):not(.version-btn) {
     width: 100%;
   }
 
