@@ -1237,10 +1237,13 @@ export default function Home() {
       <footer className="footer">
         <span className="footer-brand">
           <span className="row footer-title">
-            <Logo size={20} />
+            <Logo size={16} />
             <strong style={{ color: "var(--text)" }}>TerraDelta</strong>
           </span>
-          <span>{t("app.tagline")}</span>
+          <span className="footer-dot" aria-hidden="true">
+            ·
+          </span>
+          <span className="footer-tagline">{t("app.tagline")}</span>
         </span>
         {/* Pushed to the trailing edge on wide screens; the footer switches to
             a column below 720px (see globals.css), where it simply stacks. */}
