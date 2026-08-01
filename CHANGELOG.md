@@ -26,6 +26,10 @@ exists.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.8.0] — 2026-08-01
+
 - Demo Mode: Add a bundled sample orthophoto pair with a "Try demo" button; with no API key configured it shows a pre-computed cached result instead of calling the model.
 
 ## [1.7.0] — 2026-07-31
