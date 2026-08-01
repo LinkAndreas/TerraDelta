@@ -113,6 +113,10 @@ h3 {
   font-size: 14.5px;
 }
 
+.footer-meta {
+  margin-left: auto;
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -1495,6 +1499,11 @@ select.lang:hover {
 
   .footer {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .footer-meta {
+    margin-left: 0;
     align-items: flex-start;
   }
 

@@ -1241,7 +1241,7 @@ export default function Home() {
         </span>
         {/* Pushed to the trailing edge on wide screens; the footer switches to
             a column below 720px (see globals.css), where it simply stacks. */}
-        <span className="row" style={{ marginLeft: "auto", gap: 12, fontSize: 13.5 }}>
+        <span className="row footer-meta" style={{ gap: 12, fontSize: 13.5 }}>
           <button
             type="button"
             className="version-btn"
