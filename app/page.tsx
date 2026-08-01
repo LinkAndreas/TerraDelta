@@ -1235,9 +1235,11 @@ export default function Home() {
       )}
 
       <footer className="footer">
-        <Logo size={20} />
-        <span>
-          <strong style={{ color: "var(--text)" }}>TerraDelta</strong> · {t("app.tagline")}
+        <span className="row footer-title">
+          <Logo size={20} />
+          <span>
+            <strong style={{ color: "var(--text)" }}>TerraDelta</strong> · {t("app.tagline")}
+          </span>
         </span>
         {/* Pushed to the trailing edge on wide screens; the footer switches to
             a column below 720px (see globals.css), where it simply stacks. */}

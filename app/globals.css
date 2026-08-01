@@ -113,6 +113,10 @@ h3 {
   font-size: 14.5px;
 }
 
+.footer-title {
+  gap: 12px;
+}
+
 .footer-meta {
   margin-left: auto;
 }
