@@ -86,10 +86,8 @@ export const STRINGS = {
     "alert.rateLimit.body":
       "The provider rejected one or more requests due to a rate limit or usage quota. Wait a moment and try again, or switch to a different API key or model in Settings.",
 
-    "demo.try": "▶ Try demo",
+    "demo.try": "Demo Mode",
     "demo.tip": "Load a sample orthophoto pair and run a full comparison — no upload or API key required.",
-    "demo.hintLive": "Runs a live analysis on a sample orthophoto pair with your configured key.",
-    "demo.hintCached": "Loads a sample orthophoto pair with a pre-computed result — no API key needed.",
     "demo.loadingCached": "Loading cached demo result…",
     "demo.banner.heading": "Demo mode",
     "demo.banner.bodyLive": "This is a live analysis of the bundled sample orthophoto pair, not your own images.",
@@ -681,10 +679,8 @@ export const STRINGS = {
     "alert.rateLimit.body":
       "Der Anbieter hat eine oder mehrere Anfragen wegen eines Rate-Limits oder Nutzungskontingents abgelehnt. Warten Sie einen Moment und versuchen Sie es erneut, oder wechseln Sie in den Einstellungen zu einem anderen API-Schlüssel oder Modell.",
 
-    "demo.try": "▶ Demo ausprobieren",
+    "demo.try": "Demo-Modus",
     "demo.tip": "Ein Beispiel-Orthofotopaar laden und einen vollständigen Vergleich ausführen — kein Upload oder API-Schlüssel nötig.",
-    "demo.hintLive": "Führt mit Ihrem konfigurierten Schlüssel eine echte Analyse eines Beispiel-Orthofotopaars aus.",
-    "demo.hintCached": "Lädt ein Beispiel-Orthofotopaar mit einem vorberechneten Ergebnis — kein API-Schlüssel nötig.",
     "demo.loadingCached": "Zwischengespeichertes Demo-Ergebnis wird geladen…",
     "demo.banner.heading": "Demo-Modus",
     "demo.banner.bodyLive": "Dies ist eine Live-Analyse des mitgelieferten Beispiel-Orthofotopaars, nicht Ihrer eigenen Bilder.",

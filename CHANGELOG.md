@@ -26,7 +26,7 @@ exists.
 
 ## [Unreleased]
 
-_Nothing yet._
+- Demo Mode: Rename the topbar button to "Demo Mode" and remove the redundant duplicate button below the image upload zones.
 
 ## [1.8.1] — 2026-08-01
 
