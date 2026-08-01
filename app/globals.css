@@ -273,6 +273,12 @@ a {
   color: inherit;
 }
 
+:root[data-theme="light"] .alert {
+  border-color: #b45309;
+  background: rgba(180, 83, 9, 0.1);
+  color: #7c2d12;
+}
+
 .alert-icon {
   flex: none;
   font-size: 16px;
