@@ -1090,16 +1090,6 @@ export default function Home() {
           />
         </div>
 
-        {!refUrl && !targetUrl && (
-          <div className="row" style={{ marginTop: 12, alignItems: "center", gap: 10 }}>
-            <button type="button" className="btn-secondary" onClick={loadDemo} disabled={busy} title={t("demo.tip")}>
-              {t("demo.try")}
-            </button>
-            <span className="muted" style={{ fontSize: 12.5 }}>
-              {hasKey ? t("demo.hintLive") : t("demo.hintCached")}
-            </span>
-          </div>
-        )}
         {demoLoadError && (
           <div className="error" style={{ marginTop: 12 }}>
             {demoLoadError}
