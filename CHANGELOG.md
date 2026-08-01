@@ -28,6 +28,10 @@ exists.
 
 _Nothing yet._
 
+## [1.8.1] — 2026-08-01
+
+- Demo Mode: Fix the earlier/later demo images being swapped, which also had every cached change's direction (added/removed) and description backwards; also added a "Try demo" button next to the settings button in the topbar.
+
 ## [1.8.0] — 2026-08-01
 
 - Demo Mode: Add a bundled sample orthophoto pair with a "Try demo" button; with no API key configured it shows a pre-computed cached result instead of calling the model.

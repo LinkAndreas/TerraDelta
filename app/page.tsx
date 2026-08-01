@@ -991,6 +991,15 @@ export default function Home() {
         <div className="row" style={{ gap: 10 }}>
           <button
             className="icon-btn"
+            onClick={loadDemo}
+            disabled={busy}
+            title={t("demo.tip")}
+            style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: "nowrap" }}
+          >
+            {t("demo.try")}
+          </button>
+          <button
+            className="icon-btn"
             onClick={() => setSettingsOpen(true)}
             title={t("settings.tipOpen")}
             aria-label={t("settings.topbarLabel")}

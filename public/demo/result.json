@@ -4,231 +4,181 @@
       "id": "chg-1",
       "category": "siedlungsflaeche.wohnbauflaeche",
       "matches": [
-        { "category": "siedlungsflaeche.wohnbauflaeche", "fit": 55 },
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 40 },
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 25 }
+        { "category": "siedlungsflaeche.wohnbauflaeche", "fit": 70 },
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 45 },
+        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 30 }
       ],
-      "change_type": "removed",
-      "description": "Großer Gebäudekomplex mit vier quadratischen Wohnblöcken um Innenhöfe wurde abgerissen; die Fläche ist jetzt eine offene Rasenfläche.",
+      "change_type": "added",
+      "description": "Neuer großer Gebäudekomplex mit vier quadratischen Baukörpern und begrünten Innenhöfen auf ehemaliger Wiesenfläche errichtet.",
       "score": 97,
       "confidence": "high",
-      "bbox": [0.42315, 0, 0.2737, 0.16016666666666668],
-      "agreement": 1,
-      "note": "Der große Wohngebäudekomplex mit vier Höfen wurde abgerissen und durch eine offene Rasenfläche ersetzt, ein eindeutiger physischer Wandel."
+      "bbox": [0.41520833333333335, 0, 0.323125, 0.20150000000000004],
+      "agreement": 3,
+      "note": "Auf der ehemaligen Wiesenfläche wurde ein großer neuer Wohnkomplex mit vier quadratischen Gebäuden und begrünten Innenhöfen errichtet, eine eindeutige bauliche Veränderung."
     },
     {
       "id": "chg-2",
-      "category": "siedlungsflaeche.sport_freizeit_erholungsflaeche",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "siedlungsflaeche.sport_freizeit_erholungsflaeche", "fit": 55 },
-        { "category": "siedlungsflaeche.wohnbauflaeche", "fit": 30 },
-        { "category": "vegetation_landwirtschaft.landwirtschaft", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 55 },
+        { "category": "siedlungsflaeche.wohnbauflaeche", "fit": 35 },
+        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 20 }
       ],
-      "change_type": "removed",
-      "description": "Ehemaliger weißer Gebäudekomplex mit Innenhof wurde entfernt; an dieser Stelle befindet sich nun eine grüne Rasen-/Sportfläche.",
-      "score": 92,
-      "confidence": "high",
-      "bbox": [0.4486, 0, 0.2064, 0.12545],
+      "change_type": "added",
+      "description": "Kleine neue Nebengebäude/Anbauten im Innenhofbereich der zentralen Blockbebauung erkennbar.",
+      "score": 78,
+      "confidence": "medium",
+      "bbox": [0.6818666666666667, 0.28108333333333335, 0.053733333333333334, 0.047],
       "agreement": 1,
-      "note": "Der weiße Gebäudekomplex mit Innenhof wurde abgerissen und durch eine offene Grünfläche ersetzt, was eine reale bauliche Veränderung darstellt."
+      "note": "Im Innenhofbereich der Blockbebauung sind im späteren Bild neue, größere Gebäudestrukturen mit anderen Dachformen erkennbar, die im früheren Bild noch nicht vorhanden waren – eine dauerhafte bauliche Veränderung, keine reine Beleuchtungs- oder Jahreszeitendifferenz."
     },
     {
       "id": "chg-3",
-      "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 45 },
-        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 25 },
-        { "category": "platz.parkplatz", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 65 },
+        { "category": "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung", "fit": 45 },
+        { "category": "platz.parkplatz", "fit": 25 }
       ],
-      "change_type": "removed",
-      "description": "Neuer Parkplatzbereich mit markierten Stellflächen entlang der Straße unterhalb der ehemaligen Wohnblöcke.",
-      "score": 90,
+      "change_type": "added",
+      "description": "Auf dem Gelände einer ehemaligen Baustelle (Erdaushub, Baumaterial) wurde ein großes Gebäude mit markantem dreieckigem/pyramidenförmigem Dach fertiggestellt.",
+      "score": 95,
       "confidence": "high",
-      "bbox": [0.4504666666666667, 0.03466666666666667, 0.24383333333333337, 0.17250000000000001],
+      "bbox": [0.10828333333333333, 0.4229, 0.2343, 0.2719166666666667],
       "agreement": 1,
-      "note": "Die ehemaligen Wohnblöcke wurden abgerissen und die Fläche in eine freie Rasen-/Brachfläche umgewandelt, nicht in einen Parkplatz wie vom Detektor angegeben; die Richtung wird daher als 'removed' korrigiert."
+      "note": "Auf der ehemaligen Baustelle wurde ein großes Gebäude mit markantem dreieckigem Dach errichtet und der umliegende Parkplatz neu angelegt – eine dauerhafte bauliche Veränderung, kein saisonaler oder beleuchtungsbedingter Effekt."
     },
     {
       "id": "chg-4",
       "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 45 },
-        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 55 },
+        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 30 }
       ],
-      "change_type": "added",
-      "description": "Auf einem Dachabschnitt des zentralen Gebäudekomplexes wurden dunkle, reflektierende Photovoltaikmodule installiert.",
-      "score": 90,
-      "confidence": "high",
-      "bbox": [0.37935, 0.20518333333333333, 0.077825, 0.03213333333333333],
+      "change_type": "modified",
+      "description": "Gebäude am rechten unteren Bildrand mit veränderter Dachform/Anbau, möglicherweise um- oder ausgebaut.",
+      "score": 70,
+      "confidence": "medium",
+      "bbox": [0.9163666666666666, 0.46, 0.08041666666666666, 0.08020833333333333],
       "agreement": 1,
-      "note": "Auf dem Dach des Gebäudekomplexes sind eindeutig neue, dunkle Photovoltaikmodule zu erkennen, die im früheren Bild fehlen; die Kategorie 'sonstiges Bauwerk' passt nur bedingt, da der Katalog kein spezifisches PV-Objekt vorsieht."
+      "note": "Das Gebäude zeigt eine deutlich veränderte Dachform und Struktur zwischen beiden Aufnahmen, was auf einen Um- oder Anbau hindeutet, aber keine genauere Kategorie als 'sonstiges Bauwerk' passt gut."
     },
     {
       "id": "chg-5",
-      "category": "sonstige_merkmale.vegetationsmerkmal",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "sonstige_merkmale.vegetationsmerkmal", "fit": 45 },
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 25 },
-        { "category": "siedlungsflaeche.sport_freizeit_erholungsflaeche", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 62 },
+        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 45 },
+        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 30 }
       ],
       "change_type": "added",
-      "description": "Sternförmiges Bodenmuster/Markierung auf der Rasenfläche im Park, das zuvor nicht vorhanden war.",
-      "score": 78,
-      "confidence": "medium",
-      "bbox": [0.04125, 0.21600000000000003, 0.066, 0.07066666666666667],
+      "description": "Neues großes Gebäude mit Flachdach und zugehöriger Parkfläche, errichtet auf einer zuvor unbebauten Baustellenfläche mit Erdaushub.",
+      "score": 96,
+      "confidence": "high",
+      "bbox": [0.1196, 0.48785, 0.24916666666666668, 0.2037],
       "agreement": 1,
-      "note": "Ein sternförmiges Muster erscheint neu auf der Rasenfläche, was auf eine echte Bodenmarkierung oder Bepflanzung hindeutet, keine Beleuchtungs- oder Saisoneffekte; die Katalogkategorie passt nur mäßig, da es sich um eine ungewöhnliche Bodenmarkierung handelt."
+      "note": "Auf der zuvor unbebauten Baustellenfläche mit Erdaushub steht im späteren Bild ein neues großes Flachdachgebäude mit angrenzender Parkfläche, ein eindeutiger baulicher Neuzugang."
     },
     {
       "id": "chg-6",
-      "category": "platz.fussgaengerzone",
+      "category": "platz.parkplatz",
       "matches": [
-        { "category": "platz.fussgaengerzone", "fit": 45 },
-        { "category": "bauwerke_anlagen.bauwerk_sport_freizeit_erholung", "fit": 40 },
-        { "category": "siedlungsflaeche.sport_freizeit_erholungsflaeche", "fit": 25 }
+        { "category": "platz.parkplatz", "fit": 45 },
+        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 35 },
+        { "category": "verkehrsbauwerke_anlagen.strassenverkehrsanlage", "fit": 30 }
       ],
       "change_type": "modified",
-      "description": "Neu angelegte kreisrunde, gepflasterte Brunnen- bzw. Platzanlage mit radialer Struktur am linken Bildrand.",
-      "score": 65,
+      "description": "Der Vorplatz/die Zufahrt vor dem neuen Gebäude wurde neu gepflastert bzw. asphaltiert und umgestaltet.",
+      "score": 75,
       "confidence": "medium",
-      "bbox": [0, 0.303325, 0.049225000000000005, 0.08961666666666666],
-      "agreement": 1,
-      "note": "Die kreisrunde Platz-/Brunnenanlage am linken Bildrand zeigt zwischen den beiden Aufnahmen eine deutlich veränderte, aufwendigere radiale Pflasterstruktur, was auf eine bauliche Umgestaltung statt bloß saisonaler Unterschiede hindeutet; die genaue Nutzung ist unklar, daher moderater Fit."
+      "bbox": [0.31858333333333333, 0.5022916666666667, 0.09654166666666665, 0.11499999999999999],
+      "agreement": 2,
+      "note": "Der Vorplatz/die Zufahrt wurde erkennbar neu gestaltet und gepflastert, was eine reale bauliche Veränderung darstellt, auch wenn keine exakte Katalogkategorie perfekt passt."
     },
     {
       "id": "chg-7",
-      "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 65 },
-        { "category": "platz.parkplatz", "fit": 30 },
-        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 25 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 55 },
+        { "category": "bauwerke_anlagen.historisches_bauwerk", "fit": 35 },
+        { "category": "bauwerke_anlagen.bauwerk_sport_freizeit_erholung", "fit": 25 }
       ],
       "change_type": "modified",
-      "description": "Gepflasterter Parkplatz nordöstlich des Gebäudekomplexes ist verschwunden und durch offene Erdfläche/Baustellengelände ersetzt.",
-      "score": 90,
-      "confidence": "high",
-      "bbox": [0.2264, 0.41604166666666664, 0.124125, 0.158125],
+      "description": "Kleiner Rundbau (Kuppel) im Grünbereich zeigt veränderte Form/Ausrichtung im Vergleich zum früheren Zustand.",
+      "score": 75,
+      "confidence": "medium",
+      "bbox": [0.23009166666666667, 0.7063666666666667, 0.0498, 0.058100000000000006],
       "agreement": 1,
-      "note": "Der gepflasterte Parkplatz ist verschwunden und durch eine offene Erd-/Baustellenfläche mit sichtbaren Fahrspuren und Baumaterial ersetzt worden."
+      "note": "Der runde Kuppelbau im Grünbereich zeigt zwischen beiden Aufnahmen eine deutlich andere Dachfarbe/-form (rostbraun zu blaugrün-metallisch), was auf eine Sanierung oder Umbau des Bauwerks hindeutet; die genaue Bauwerksart ist unklar, daher moderate Kategorie-Passung."
     },
     {
       "id": "chg-8",
       "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 45 },
-        { "category": "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung", "fit": 35 },
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 25 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 60 },
+        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 30 }
       ],
-      "change_type": "modified",
-      "description": "Großer Gebäudekomplex mit spitzem Glasdach teilweise abgerissen; Dachfläche durchbrochen, dahinter offene Baugrube mit Erdaushub und Materiallagern sichtbar – Umbau/Abriss im Gange.",
-      "score": 92,
+      "change_type": "added",
+      "description": "Ein kleines neues Gebäude mit dunklem Dach ist auf der Grünfläche nahe dem Flussufer hinzugekommen.",
+      "score": 88,
       "confidence": "high",
-      "bbox": [0.096425, 0.4557, 0.25254166666666666, 0.22320833333333334],
+      "bbox": [0.3471666666666667, 0.7163666666666667, 0.0415, 0.038316666666666666],
       "agreement": 1,
-      "note": "Der Gebäudekomplex mit dem spitzen Glasdach wurde teilweise abgerissen, das Dach ist durchbrochen und dahinter ist eine offene Baugrube mit Erdaushub sichtbar – eine reale bauliche Veränderung, jedoch passt kein Katalogeintrag exakt, da es sich um einen Umbau-/Abrisszustand handelt."
+      "note": "Auf der Grünfläche ist im späteren Bild ein neues Gebäude mit dunklem Dach zu erkennen, das im früheren Bild nicht vorhanden war; die Klassifikation als sonstiges Bauwerk passt mangels spezifischerer Kategorie."
     },
     {
       "id": "chg-9",
-      "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 55 },
-        { "category": "siedlungsflaeche.flaeche_gemischter_nutzung", "fit": 30 },
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 45 },
+        { "category": "siedlungsflaeche.wohnbauflaeche", "fit": 25 }
       ],
       "change_type": "modified",
-      "description": "Ehemaliges Gebäude mit grauem Dach wurde abgerissen; an seiner Stelle liegt jetzt eine offene, helle Baustellenfläche mit aufgeschüttetem Erdmaterial.",
-      "score": 90,
-      "confidence": "high",
-      "bbox": [0.23208333333333334, 0.4444, 0.20916666666666667, 0.131625],
+      "description": "Kleines Nebengebäude nördlich der Solarhalle hat nun ein dunkles Dach statt des zuvor hellen/bräunlichen Dachs, vermutlich Umbau oder Neueindeckung.",
+      "score": 55,
+      "confidence": "medium",
+      "bbox": [0.6854833333333333, 0.7314166666666666, 0.04418333333333333, 0.03916666666666667],
       "agreement": 1,
-      "note": "Das ehemalige Gebäude mit grauem Dach wurde abgerissen und durch eine offene Baustellenfläche mit aufgeschüttetem Erdmaterial ersetzt, was eine reale physische Veränderung darstellt; die Klassifikation als vegetationslose Fläche passt nur mäßig, da es sich um eine temporäre Baustelle handelt."
+      "note": "Das kleine Nebengebäude ist in beiden Aufnahmen sichtbar, wirkt aber im späteren Bild deutlich dunkler gedeckt, was auf eine Dacherneuerung hindeutet, auch wenn starke Vegetationsverdeckung die Bewertung erschwert."
     },
     {
       "id": "chg-10",
-      "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche",
+      "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 55 },
-        { "category": "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung", "fit": 35 },
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 20 }
+        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 55 },
+        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 35 }
       ],
       "change_type": "modified",
-      "description": "Neue Erdaushub- und Materialhaufen (Bauschutt/Erdhaufen) im Bereich der ehemaligen Gebäudefläche und angrenzendem Gelände.",
+      "description": "Große Halle mit ehemals silbernem Rundbogendach wurde mit dunklen Photovoltaik-Modulen und teils rötlicher Verkleidung ausgestattet/umgebaut.",
       "score": 90,
       "confidence": "high",
-      "bbox": [0.105, 0.4116666666666666, 0.28875, 0.17416666666666666],
+      "bbox": [0.7697499999999999, 0.7481166666666667, 0.12100000000000001, 0.08981666666666667],
       "agreement": 1,
-      "note": "Das ehemalige Gebäude wurde abgerissen, an seiner Stelle und im umliegenden Gelände sind nun offene Erd- und Schutthaufen sichtbar – eine dauerhafte physische Veränderung, am ehesten als vegetationslose/unbebaute Fläche einzustufen, da kein spezifischerer Kategorietyp (z. B. Abbaugebiet) exakt passt."
+      "note": "Das Dach der Halle wurde eindeutig verändert (Photovoltaik-Module statt silbernem Rundbogendach), eine passende spezifische Kategorie fehlt, daher generische Bauwerk-Klassifikation mit mäßiger Passgenauigkeit."
     },
     {
       "id": "chg-11",
       "category": "bauwerke_anlagen.sonstiges_bauwerk",
       "matches": [
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 55 },
-        { "category": "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung", "fit": 35 },
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 25 }
-      ],
-      "change_type": "modified",
-      "description": "Gebäude mit teilweise weißen Dachabdeckungen/Planen – offenbar Dachsanierung oder Bauarbeiten am Bestandsgebäude.",
-      "score": 90,
-      "confidence": "high",
-      "bbox": [0.1178, 0.4795916666666667, 0.18480000000000002, 0.16432499999999997],
-      "agreement": 1,
-      "note": "Das Gebäude wurde umgebaut/teilweise abgerissen – ein Teil des Dachs mit dem markanten dreieckigen Oberlicht ist verschwunden und durch eine Baustellenfläche mit freiliegendem Boden und Baumaschinen ersetzt, eindeutig eine dauerhafte bauliche Veränderung."
-    },
-    {
-      "id": "chg-12",
-      "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche",
-      "matches": [
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 55 },
-        { "category": "siedlungsflaeche.tagebau_grube_steinbruch", "fit": 30 },
-        { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 20 }
-      ],
-      "change_type": "modified",
-      "description": "Große aufgerissene Erdfläche mit Aushubmaterial und Baumaschinenspuren neben dem sanierten Gebäude – neue Baustelle/Erdarbeiten.",
-      "score": 92,
-      "confidence": "high",
-      "bbox": [0.1429, 0.4929, 0.198, 0.18150000000000002],
-      "agreement": 1,
-      "note": "Das ehemalige Gebäude wurde abgerissen, an seiner Stelle ist eine große aufgerissene Erdfläche mit Aushubmaterial und Baumaschinenspuren sichtbar – eine echte physische Veränderung, die am besten als vegetationslose/unbebaute Fläche eingeordnet wird, wobei keine Kategorie perfekt passt."
-    },
-    {
-      "id": "chg-13",
-      "category": "bauwerke_anlagen.sonstiges_bauwerk",
-      "matches": [
         { "category": "bauwerke_anlagen.sonstiges_bauwerk", "fit": 60 },
-        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 35 }
-      ],
-      "change_type": "modified",
-      "description": "Die Industriehalle mit Flachdach und Photovoltaikanlage wurde abgerissen und durch eine größere Halle mit gewölbtem, silbernem Tonnendach ersetzt.",
-      "score": 95,
-      "confidence": "high",
-      "bbox": [0.7602, 0.7247666666666667, 0.14625, 0.1134],
-      "agreement": 2,
-      "note": "Die flache Industriehalle mit Photovoltaikanlage wurde abgerissen und durch eine größere Halle mit gewölbtem, silbernem Tonnendach ersetzt, ein echter baulicher Wandel."
-    },
-    {
-      "id": "chg-14",
-      "category": "platz.parkplatz",
-      "matches": [
-        { "category": "platz.parkplatz", "fit": 45 },
-        { "category": "siedlungsflaeche.industrie_gewerbeflaeche", "fit": 55 },
-        { "category": "vegetation_landwirtschaft.unland_vegetationslose_flaeche", "fit": 30 }
+        { "category": "siedlungsflaeche.flaeche_besonderer_funktionaler_praegung", "fit": 35 },
+        { "category": "platz.parkplatz", "fit": 20 }
       ],
       "change_type": "added",
-      "description": "Neue befestigte/geschotterte Vorplatz- und Lagerfläche rund um die neue Halle.",
+      "description": "Neue befestigte helle Fläche/Platz im Innenhof des Schulgebäudes unten in der Bildmitte.",
       "score": 88,
       "confidence": "high",
-      "bbox": [0.6970666666666666, 0.71875, 0.26034999999999997, 0.14016666666666666],
+      "bbox": [0.71245, 0.8185, 0.05895, 0.04546666666666667],
       "agreement": 1,
-      "note": "Um die neu errichtete Halle ist eine deutlich größere geschotterte/befestigte Vorplatz- und Lagerfläche entstanden, die vorher als Vegetation/Baumfläche erschien – eine reale, dauerhafte Nutzungsänderung, wobei keine Kategorie exakt passt."
+      "note": "Im Innenhof des Schulgebäudes wurde ein neuer heller, flachgedeckter Baukörper errichtet, wo zuvor ein befestigter Platz mit Fahrzeugen zu sehen war – eine dauerhafte bauliche Veränderung."
     }
   ],
-  "summary": "Es wurden eine neue Baustelle mit Erdaushub und Dachsanierung, ein Ersatz-/Erweiterungsbau mit silbernem Hallendach am Flussufer sowie eine neue sternförmige Bodenmarkierung im Park festgestellt.",
+  "summary": "Zwei wesentliche bauliche Veränderungen: ein neuer Wohnkomplex mit mehreren Gebäudeblöcken im oberen Bildbereich sowie die Fertigstellung eines großen Gebäudes mit Parkplatz auf einer ehemaligen Baustellenfläche im mittleren linken Bereich.",
   "model": "claude-sonnet-5",
   "usage": {
-    "inputTokens": 18936,
-    "outputTokens": 16800,
+    "inputTokens": 16424,
+    "outputTokens": 12271,
     "cacheWriteTokens": 19167,
-    "cacheReadTokens": 129518
+    "cacheReadTokens": 102305
   }
 }
