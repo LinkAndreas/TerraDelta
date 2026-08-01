@@ -1504,7 +1504,10 @@ select.lang:hover {
 
   .footer-meta {
     margin-left: 0;
+    flex-direction: column;
     align-items: flex-start;
+    width: 100%;
+    gap: 8px;
   }
 
   .modal-panel {
@@ -1535,7 +1538,7 @@ select.lang:hover {
      a segmented group (e.g. the category preset tabs) stretched to 100% of
      its own width inside an inline-flex row, blowing the row way past the
      viewport and forcing horizontal scroll. */
-  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn):not(.category-disclosure) {
+  button:not(.icon-btn):not(.btn-secondary):not(.segmented button):not(.chip-btn):not(.category-disclosure):not(.version-btn) {
     width: 100%;
   }
 
