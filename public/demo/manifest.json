@@ -1,0 +1,36 @@
+{
+  "reference": {
+    "url": "/demo/reference.jpg",
+    "ext": "tif",
+    "geo": {
+      "proj4Def": "+proj=tmerc +lat_0=0 +lon_0=9 +k_0=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +a=6378137 +b=6356752.314140356 +pm=0 +axis=en +no_defs ",
+      "bbox": [
+        441753.5651837498,
+        5411671.364404377,
+        442353.5651837498,
+        5412271.364404377
+      ],
+      "pixelWidth": 1200,
+      "pixelHeight": 1200
+    },
+    "width": 1200,
+    "height": 1200
+  },
+  "target": {
+    "url": "/demo/target.jpg",
+    "ext": "tif",
+    "geo": {
+      "proj4Def": "+proj=tmerc +lat_0=0 +lon_0=9 +k_0=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +a=6378137 +b=6356752.314140356 +pm=0 +axis=en +no_defs ",
+      "bbox": [
+        441753.5651837498,
+        5411671.364404377,
+        442353.5651837498,
+        5412271.364404377
+      ],
+      "pixelWidth": 1200,
+      "pixelHeight": 1200
+    },
+    "width": 1200,
+    "height": 1200
+  }
+}
