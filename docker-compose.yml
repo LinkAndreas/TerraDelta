@@ -1,12 +1,20 @@
+name: terradelta
+
 services:
   terradelta:
-    build: .
-    image: terradelta:latest
+    # Built by GitHub Actions (.github/workflows/deploy.yml); TAG is the commit SHA of the deploy.
+    image: ghcr.io/linkandreas/terradelta:${TAG:-latest}
     container_name: terradelta
-    ports:
-      - "32771:32771"
+    # No published ports: the cloudflared container on the `web` network reaches it at
+    # http://terradelta:32771 and serves it (with HTTPS) at the domain.
+    networks:
+      - web
     environment:
       # All optional — users can also enter their key in the app UI.
-      # Values come from a local .env file or the host environment.
+      # Values come from a .env file next to this file or the host environment.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     restart: unless-stopped
+
+networks:
+  web:
+    external: true
