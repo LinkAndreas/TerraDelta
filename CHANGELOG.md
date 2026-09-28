@@ -28,6 +28,10 @@ exists.
 
 _Nothing yet._
 
+## [1.8.4] — 2026-09-28
+
+- Deployment: Ship prebuilt Docker images from GitHub Container Registry and serve the app only through the Cloudflare Tunnel, no longer on a public port.
+
 ## [1.8.3] — 2026-08-01
 
 - Alert Color: Fix alert color in Light-Mode.
