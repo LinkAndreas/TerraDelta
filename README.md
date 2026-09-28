@@ -77,18 +77,10 @@ upload an earlier and a later image, then **Detect changes**.
 
 The app builds to a self-contained Next.js standalone server.
 
-**Docker Compose (recommended):**
-
-```bash
-docker compose up -d --build
-# → http://localhost:32771
-```
-
-**Plain Docker:**
-
 ```bash
 docker build -t terradelta .
 docker run -d -p 32771:32771 --name terradelta terradelta
+# → http://localhost:32771
 ```
 
 API keys are **optional** at the container level — pass them only if you want a
@@ -114,23 +106,17 @@ server**.
    - `HOSTINGER_USERNAME`: Your SSH user (e.g., `root`)
    - `HOSTINGER_SSH_KEY`: Your private SSH key
 
-   Push to the `main` branch. The included Action will automatically deploy the app to `~/terradelta` and run Docker.
-   The app now listens on port **32771**.
-3. **Point your domain & add HTTPS.** Put a reverse proxy in front (Hostinger's
-   panel, or Nginx + Certbot) mapping your domain to `127.0.0.1:32771`. Minimal
-   Nginx site:
-   ```nginx
-   server {
-     server_name terradelta.example.com;
-     location / {
-       proxy_pass http://127.0.0.1:32771;
-       proxy_set_header Host $host;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto $scheme;
-     }
-   }
-   ```
-   Then issue a certificate with `certbot --nginx`.
+   Every push to `main` runs `.github/workflows/deploy.yml`: GitHub builds the image and pushes it
+   to `ghcr.io/linkandreas/terradelta`, tagged with the commit SHA. The VPS only receives
+   `docker-compose.yml` in `~/terradelta`, pulls that image and restarts the container. An optional
+   server-side `ANTHROPIC_API_KEY` goes into `~/terradelta/.env` on the VPS.
+
+   To roll back, run on the VPS: `cd ~/terradelta && TAG=<older commit sha> docker compose up -d`.
+3. **Point your domain & add HTTPS.** The container publishes no ports; it joins the shared
+   Docker network `web` (`docker network create web` once). Attach the `cloudflared` container to
+   that network and, in Cloudflare **Zero Trust › Networks › Tunnels**, add a public hostname for
+   your domain with service **HTTP**, URL `terradelta:32771`. Cloudflare creates the DNS record and
+   serves HTTPS.
 4. **Update later**: Just merge or push your changes to the `main` branch. The GitHub Action will deploy them automatically!
 
 > **Alternative (no Docker):** on any Node 20+ host run
@@ -154,7 +140,7 @@ app/                 Next.js App Router (UI page, layout, /api/analyze route, fa
 components/          React components (CompareView, ReportTable, Settings modal, Onboarding, …)
 lib/                 align.ts (OpenCV), tiles.ts, prompt.ts, claude.ts, detect.ts, i18n.ts, theme.ts
 Dockerfile           Multi-stage production image (standalone)
-docker-compose.yml   One-command run
+docker-compose.yml   Production service on the VPS
 ```
 
 ## 🛠️ Tech stack

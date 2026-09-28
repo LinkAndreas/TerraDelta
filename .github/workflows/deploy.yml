@@ -1,35 +1,97 @@
 name: Deploy to Hostinger VPS
 
+# GitHub builds the Docker image and pushes it to GitHub Container Registry, tagged with the commit
+# SHA. The VPS only receives docker-compose.yml, pulls that exact image and restarts the container.
+# On the VPS the container joins the shared `web` network, where the cloudflared container reaches
+# it at http://terradelta:32771 and serves it (with HTTPS) at the domain. An optional server-side
+# ANTHROPIC_API_KEY goes into ~/terradelta/.env on the VPS.
+#
+# Roll back on the VPS: cd ~/terradelta && TAG=<older commit sha> docker compose up -d
+#
+# Repository secrets: HOSTINGER_HOST, HOSTINGER_USERNAME, HOSTINGER_SSH_KEY
+
 on:
   workflow_dispatch:
-    branches:
-      - main
   push:
     branches:
       - main
 
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/linkandreas/terradelta
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: Copy files to VPS
-        uses: appleboy/scp-action@v0.1.7
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Copy docker-compose.yml to VPS
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USERNAME }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          source: "."
+          source: "docker-compose.yml"
           target: "~/terradelta"
 
-      - name: Build and Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Pull and restart via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USERNAME }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          envs: TAG,GHCR_USER,GHCR_TOKEN
           script: |
+            set -e
             cd ~/terradelta
-            docker compose up -d --build
+            docker network inspect web >/dev/null 2>&1 || docker network create web
+            # The job's token is only valid during this run, so log out again right after the pull.
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            TAG="$TAG" docker compose pull
+            docker logout ghcr.io
+            TAG="$TAG" docker compose up -d --remove-orphans
+            docker image prune -f
